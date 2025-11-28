@@ -14,12 +14,14 @@ Unlike traditional OCR, this tool converts PDF pages into high-resolution images
   - **Google Gemini** — Includes built-in retry logic for rate-limit / quota errors
   - **OpenRouter / OpenAI / Anthropic** — Access to GPT-4o, Claude 3.5 Sonnet, etc.
 - **Universal Input** — Accepts local file paths or public URLs
-- **High-Resolution Processing** — PDF → image conversion at 2× resolution for maximum detail
-- **Robust Error Handling** — Gracefully handles download failures, API errors, rate limits
-- **Structured Output** — Saves results as newline-delimited JSON (`.jsonl`)
-- **Modular Architecture** — Refactored codebase for better maintainability and extensibility
-- **Async/Await Support** — Faster processing for API calls with parallel capabilities
-- **Progress Bars** — Real-time progress tracking for large documents using `tqdm`
+- **High-Resolution Processing** — PDF → image conversion at configurable zoom (1-4x) and quality
+- **Resume Capability** ⚡ **(NEW!)** — Resume processing from the last completed page after interruptions
+- **Robust Error Handling** — Input validation, response validation, graceful error recovery
+- **Structured Output** — Saves results as newline-delimited JSON (`.jsonl`) with optional text conversion
+- **Modular Architecture** — Refactored codebase with clear separation of concerns
+- **Async/Await Support** — Non-blocking API calls for responsive performance
+- **Progress Bars** — Real-time progress tracking with page-level detail
+- **Configurable Settings** — Environment variable support for zoom, quality, timeouts, and more
 
 ---
 
@@ -212,6 +214,221 @@ ai-drawing-analyzer document.pdf -p anthropic -m claude-3-5-sonnet-20241022
 
 ```bash
 ai-drawing-analyzer https://example.com/document.pdf -p huggingface-local -m microsoft/Florence-2-large
+```
+
+---
+
+## ✨ Recent Enhancements (v2.2.0)
+
+### 🔄 Resume Processing from Last Completed Page
+
+**Problem:** Large PDF files can take hours to process. Network issues or intentional stops would require restarting from page 1.
+
+**Solution:** The `--resume` flag allows you to pick up where you left off.
+
+#### Usage
+
+```bash
+# First attempt (interrupted after page 15)
+ai-drawing-analyzer large_document.pdf -p openai -m gpt-4o
+# Interrupted...
+
+# Resume from page 16
+ai-drawing-analyzer large_document.pdf -p openai -m gpt-4o --resume
+```
+
+#### How It Works
+
+1. Reads the existing output file
+2. Identifies completed pages by reading the JSONL entries
+3. Processes only missing pages
+4. Appends results to the same output file
+5. Logs the progress
+
+#### Advanced: Custom Output File
+
+```bash
+# Specify output file on first run
+ai-drawing-analyzer document.pdf -p openai -m gpt-4o -o my_custom_output.jsonl
+
+# Resume the same output file
+ai-drawing-analyzer document.pdf -p openai -m gpt-4o --resume -o my_custom_output.jsonl
+```
+
+---
+
+### ⚙️ Configuration Management
+
+**New:** Centralized configuration with environment variable support for flexible deployments.
+
+#### Configurable Settings
+
+| Setting | Default | Range | Purpose |
+|---------|---------|-------|---------|
+| `PDF_ZOOM_LEVEL` | 2 | 1-4 | Page rendering resolution (2 = 2x zoom) |
+| `JPEG_QUALITY` | 90 | 1-100 | Image compression quality |
+| `API_TIMEOUT` | 120 | 30-600 | API call timeout in seconds |
+| `DOWNLOAD_TIMEOUT` | 60 | 10-300 | PDF download timeout |
+| `MAX_RETRIES` | 3 | 1-10 | Retry attempts for failed requests |
+| `MAX_TOKENS` | 2048 | 512-4096 | Maximum response length from LLM |
+
+#### Using Environment Variables
+
+```bash
+# Override zoom and quality for better speed
+export PDF_ZOOM_LEVEL=1
+export JPEG_QUALITY=75
+ai-drawing-analyzer document.pdf -p openai -m gpt-4o
+
+# Increase timeout for slow networks
+export API_TIMEOUT=180
+export DOWNLOAD_TIMEOUT=120
+ai-drawing-analyzer https://example.com/large.pdf -p anthropic -m claude-3-5-sonnet-20241022
+
+# Reduce quality for faster processing
+export JPEG_QUALITY=70
+ai-drawing-analyzer document.pdf -p huggingface-local -m microsoft/Florence-2-large
+```
+
+#### Using .env File
+
+Create or edit `.env`:
+
+```env
+# PDF Processing
+PDF_ZOOM_LEVEL=2
+JPEG_QUALITY=90
+
+# Network
+API_TIMEOUT=120
+DOWNLOAD_TIMEOUT=60
+MAX_RETRIES=3
+
+# LLM
+MAX_TOKENS=2048
+```
+
+Then just run normally:
+
+```bash
+ai-drawing-analyzer document.pdf -p openai -m gpt-4o
+# Settings auto-loaded from .env
+```
+
+---
+
+### 🛡️ Enhanced Error Handling
+
+**Improvements:**
+- ✅ Input validation for all parameters
+- ✅ Response validation from all API providers
+- ✅ Per-page error isolation (one failure doesn't stop entire process)
+- ✅ Specific error messages with remediation steps
+- ✅ Graceful KeyboardInterrupt handling (Ctrl+C)
+- ✅ Network retry logic with exponential backoff
+
+#### Error Scenarios & Recovery
+
+```bash
+# Missing API Key - Clear error message
+ai-drawing-analyzer document.pdf -p openai -m gpt-4o
+# Error: Missing API key: openai.
+#        Set the environment variable or use --api-key
+
+# Fix it:
+export OPENAI_API_KEY=sk-...
+ai-drawing-analyzer document.pdf -p openai -m gpt-4o
+
+# Or:
+ai-drawing-analyzer document.pdf -p openai -m gpt-4o --api-key sk-...
+```
+
+```bash
+# Network timeout on page 45 - Processing continues
+# ❌ Error on page 45: Timeout waiting for response
+# ✅ Continuing to page 46...
+
+# Later, resume and retry:
+ai-drawing-analyzer document.pdf -p openai -m gpt-4o --resume
+# Retries page 45 + processes remaining pages
+```
+
+```bash
+# Interrupted with Ctrl+C - Clean shutdown
+# Processing Pages: 35%|███░░░░ | 68/195 [02:34<04:45, 1.78s/page]
+# ^C
+# Processing cancelled by user
+# Results saved: output_ocr_20250127_143022.jsonl (68 pages)
+```
+
+---
+
+### 📝 New CLI Options
+
+```bash
+# Show all options
+ai-drawing-analyzer --help
+
+# Key new flags:
+-o, --output FILE          # Custom output file path
+    --resume               # Resume from last completed page
+-e, --env FILE             # Path to .env file (default: .env)
+```
+
+---
+
+### 💪 Advanced Features
+
+#### Fine-Tuned PDF Rendering
+
+```bash
+# Higher resolution for small text
+export PDF_ZOOM_LEVEL=3
+ai-drawing-analyzer technical_drawing.pdf -p huggingface-local -m microsoft/Florence-2-large
+
+# Lower resolution for faster processing
+export PDF_ZOOM_LEVEL=1
+ai-drawing-analyzer document.pdf -p gemini -m gemini-2.0-flash-exp
+
+# Lower JPEG quality for faster uploads to APIs
+export PDF_ZOOM_LEVEL=2
+export JPEG_QUALITY=70
+ai-drawing-analyzer document.pdf -p openai -m gpt-4o
+```
+
+#### Batch Processing with Resume
+
+```bash
+#!/bin/bash
+# Process multiple large PDFs with resume capability
+
+for pdf in *.pdf; do
+  output="${pdf%.pdf}_output.jsonl"
+  echo "Processing $pdf..."
+
+  # Run with resume - will skip completed pages
+  ai-drawing-analyzer "$pdf" \
+    -p huggingface-local \
+    -m microsoft/Florence-2-large \
+    -o "$output" \
+    --resume
+
+  echo "✅ Completed: $output"
+done
+```
+
+#### Custom Configuration per Document Type
+
+```bash
+# High precision for blueprints
+export PDF_ZOOM_LEVEL=3
+export API_TIMEOUT=180
+ai-drawing-analyzer blueprint.pdf -p huggingface-local -m microsoft/Florence-2-large
+
+# Fast processing for quick reviews
+export PDF_ZOOM_LEVEL=1
+export JPEG_QUALITY=70
+ai-drawing-analyzer report.pdf -p gemini -m gemini-2.0-flash-exp
 ```
 
 ---
@@ -432,6 +649,208 @@ ai-drawing-analyzer document.pdf -p gemini -m gemini-2.0-flash-exp
 ```
 
 **Output:** Fast, free extraction (free tier)
+
+---
+
+## 🎯 Real-World Examples & Use Cases
+
+### Example 1: Processing a 100-Page Blueprint Set (with Resume)
+
+**Scenario:** You need to extract text from a large electrical blueprint set, but your network is unstable.
+
+```bash
+# Start processing
+ai-drawing-analyzer electrical_substation_plans.pdf \
+  -p huggingface-local \
+  -m microsoft/Florence-2-large \
+  -o electrical_extraction.jsonl
+
+# After page 42, network drops...
+# Just re-run with --resume:
+
+ai-drawing-analyzer electrical_substation_plans.pdf \
+  -p huggingface-local \
+  -m microsoft/Florence-2-large \
+  -o electrical_extraction.jsonl \
+  --resume
+
+# Processing resumes from page 43 ✅
+```
+
+### Example 2: High-Precision Scanning of Technical Drawings
+
+**Scenario:** You have handwritten notes on blueprints that you need extracted with maximum accuracy.
+
+```bash
+# Use 3x zoom + high quality + local processing (no API delays)
+export PDF_ZOOM_LEVEL=3
+export JPEG_QUALITY=95
+export API_TIMEOUT=180
+
+ai-drawing-analyzer handwritten_notes.pdf \
+  -p huggingface-local \
+  -m microsoft/Florence-2-large
+```
+
+### Example 3: Fast Processing for Document Review
+
+**Scenario:** You want quick text extraction for multiple documents and don't need perfect accuracy.
+
+```bash
+# Use 1x zoom + lower quality + fast cloud API
+export PDF_ZOOM_LEVEL=1
+export JPEG_QUALITY=70
+
+ai-drawing-analyzer document1.pdf -p gemini -m gemini-2.0-flash-exp
+ai-drawing-analyzer document2.pdf -p gemini -m gemini-2.0-flash-exp
+ai-drawing-analyzer document3.pdf -p gemini -m gemini-2.0-flash-exp
+```
+
+### Example 4: Converting Multiple PDFs with Automatic Text Generation
+
+**Scenario:** You have 10 PDFs and want text extraction + conversion to LLM-ready format for all of them.
+
+```bash
+#!/bin/bash
+# Batch process multiple PDFs with automatic text conversion
+
+for pdf in *.pdf; do
+  echo "═══════════════════════════════════════"
+  echo "Processing: $pdf"
+  echo "═══════════════════════════════════════"
+
+  output_jsonl="output_${pdf%.pdf}.jsonl"
+  output_text="text_${pdf%.pdf}.txt"
+
+  # Extract OCR and convert to text in one command
+  ai-drawing-analyzer "$pdf" \
+    -p huggingface-local \
+    -m microsoft/Florence-2-large \
+    -o "$output_jsonl" \
+    --to-text \
+    --output-text "$output_text"
+
+  echo "✅ Created: $output_jsonl"
+  echo "✅ Created: $output_text"
+  echo ""
+done
+
+echo "═══════════════════════════════════════"
+echo "All documents processed!"
+echo "═══════════════════════════════════════"
+```
+
+### Example 5: Analyzing Documents with Claude
+
+**Scenario:** You want to send extracted text to Claude for detailed analysis.
+
+```bash
+#!/bin/bash
+# Extract from PDF and send to Claude
+
+pdf=$1
+model=$2
+
+echo "Extracting from $pdf..."
+
+# Step 1: Extract and convert to text
+ai-drawing-analyzer "$pdf" \
+  -p huggingface-local \
+  -m microsoft/Florence-2-large \
+  --to-text \
+  -o extracted.txt
+
+echo "✅ Extraction complete"
+echo "Sending to Claude for analysis..."
+
+# Step 2: Create prompt with the extracted text
+cat extracted.txt | pbcopy  # Copy to clipboard (macOS)
+
+echo "✅ Copied to clipboard - now paste into Claude Chat!"
+# Or use Claude API:
+# curl https://api.anthropic.com/v1/messages \
+#   -H "x-api-key: $ANTHROPIC_API_KEY" \
+#   -d @- << EOF
+# ...
+```
+
+### Example 6: Configuration for Different Document Types
+
+**Setup different config files for different use cases:**
+
+```bash
+# config-blueprints.env
+PDF_ZOOM_LEVEL=3
+JPEG_QUALITY=95
+API_TIMEOUT=180
+
+# config-reports.env
+PDF_ZOOM_LEVEL=2
+JPEG_QUALITY=85
+API_TIMEOUT=120
+
+# config-quick.env
+PDF_ZOOM_LEVEL=1
+JPEG_QUALITY=70
+API_TIMEOUT=60
+
+# Use them:
+source config-blueprints.env
+ai-drawing-analyzer blueprint.pdf -p huggingface-local -m microsoft/Florence-2-large
+
+source config-quick.env
+ai-drawing-analyzer quick_review.pdf -p gemini -m gemini-2.0-flash-exp
+```
+
+### Example 7: Long-Running Processing with Monitoring
+
+**Scenario:** Processing a 500-page document with monitoring and progress logging.
+
+```bash
+#!/bin/bash
+
+pdf="large_document.pdf"
+output="extraction.jsonl"
+log="processing.log"
+
+echo "Starting processing at $(date)" > "$log"
+
+ai-drawing-analyzer "$pdf" \
+  -p huggingface-local \
+  -m microsoft/Florence-2-large \
+  -o "$output" \
+  2>&1 | tee -a "$log"
+
+# Count completed pages
+pages=$(grep -c '"page"' "$output")
+echo "Completed: $pages pages at $(date)" >> "$log"
+
+# Optional: send notification
+echo "✅ Processing complete - $pages pages extracted" | mail -s "Document Processing Done" user@example.com
+```
+
+### Example 8: Resuming After an Error
+
+**Scenario:** Processing fails at page 250 of 500. Resume and let it retry.
+
+```bash
+# First attempt stops at page 250
+ai-drawing-analyzer document.pdf \
+  -p anthropic \
+  -m claude-3-5-sonnet-20241022 \
+  -o output.jsonl
+
+# Later, just resume - it will:
+# 1. Check what's already done (pages 1-250)
+# 2. Retry page 250 (which failed)
+# 3. Continue from 251 onwards
+
+ai-drawing-analyzer document.pdf \
+  -p anthropic \
+  -m claude-3-5-sonnet-20241022 \
+  -o output.jsonl \
+  --resume
+```
 
 ---
 
@@ -728,10 +1147,20 @@ Feel free to submit issues, fork the repo, and create pull requests for improvem
 
 For issues or questions:
 1. Check the **Troubleshooting** section above
-2. Review the code comments in `pdf_analyzer_complete.py`
-3. Open an issue on GitHub
+2. Review the code comments in the `src/ai_drawing_analyzer/` directory
+3. Check `ENHANCEMENTS.md` for recent improvements
+4. Review the legacy implementation in `dwg_analyzer.py` for reference
+5. Open an issue on GitHub
+
+---
+
+## 📚 Additional Resources
+
+- **ENHANCEMENTS.md** — Detailed changelog of v2.2.0 improvements
+- **QUICK_START.md** — Quick reference guide for rapid setup
+- **dwg_analyzer.py** — Legacy standalone implementation (reference only)
 
 ---
 
 **Last Updated:** January 2025
-**Version:** 2.1.0 (with modular architecture and async support)
+**Version:** 2.2.0 (with resume capability, config management, and enhanced error handling)
