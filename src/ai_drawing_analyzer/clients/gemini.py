@@ -18,8 +18,11 @@ class GeminiClient(BaseClient):
         ]
     
     async def analyze_image(self, image_base64: str, prompt: str, model: str) -> str:
+        if not image_base64 or not prompt or not model:
+            raise ValueError("image_base64, prompt, and model are required")
+
         url = f"{self.base_url}/models/{model}:generateContent?key={self.api_key}"
-        
+
         payload = {
             "contents": [{
                 "parts": [
@@ -37,34 +40,41 @@ class GeminiClient(BaseClient):
                 "maxOutputTokens": 2048
             }
         }
-        
+
         # Manual retry logic for 429 as per original code, but using async sleep
         max_retries = 3
         retry_count = 0
-        
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             while retry_count <= max_retries:
                 try:
                     response = await client.post(url, json=payload)
-                    
+
                     if response.status_code == 429:
                         await asyncio.sleep(65)
                         retry_count += 1
                         continue
-                    
+
                     response.raise_for_status()
                     result = response.json()
-                    
+
                     if 'promptFeedback' in result and result['promptFeedback'].get('blockReason'):
                         raise Exception(f"Blocked by safety settings: {result['promptFeedback']}")
-                    
-                    return result['candidates'][0]['content']['parts'][0]['text']
-                    
+
+                    if not result.get('candidates') or len(result['candidates']) == 0:
+                        raise ValueError(f"Invalid response structure: {result}")
+
+                    content = result['candidates'][0].get('content', {}).get('parts', [])
+                    if not content or not content[0].get('text'):
+                        raise ValueError("Empty content in Gemini response")
+
+                    return content[0]['text']
+
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code == 429:
                         await asyncio.sleep(65)
                         retry_count += 1
                         continue
                     raise Exception(f"Gemini HTTP {e.response.status_code}: {e.response.text}")
-            
+
             raise Exception("Max retries exceeded for Gemini API")
