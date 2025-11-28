@@ -175,45 +175,102 @@ ANTHROPIC_API_KEY=your_key_here
 
 ---
 
+## 🚀 Getting Started
+
+### ✅ What You Have After Installation
+
+You now have a command-line tool called **`ai-drawing-analyzer`** available globally on your system. This is the **recommended and only actively maintained way** to use the AI Drawing Analyzer.
+
+### ❌ What NOT to Do
+
+- ❌ **Don't** try to run `python pdf_analyzer_legacy.py` — this is the old standalone version kept only for reference
+- ❌ **Don't** try to run `python dwg_analyzer.py` — this is the renamed legacy file for backward reference
+- ✅ **DO** use the `ai-drawing-analyzer` command instead
+
+### ✅ What You SHOULD Do
+
+Always use the installed CLI command:
+
+```bash
+ai-drawing-analyzer your_document.pdf
+```
+
+This gives you:
+- ✨ Interactive mode for easy selection
+- 🔄 Resume capability for interrupted processing
+- ⚙️ Full configuration support
+- 🛡️ Enhanced error handling
+- 📊 Real-time progress tracking
+
+---
+
 ## 📖 Usage
 
-### Interactive Mode (Recommended for beginners)
+### ⚡ Quick Start - Two Ways to Use
+
+#### Option 1: Interactive Mode (Recommended for first time) ✨
 
 ```bash
 ai-drawing-analyzer /path/to/your/document.pdf
 ```
 
-The script will guide you through:
-1. Selecting a provider (Local, Cloud API, etc.)
-2. Choosing a model
-3. Processing the PDF
+The tool will guide you through:
+1. **Select a provider** — Choose from local, cloud, or free APIs
+2. **Select a model** — Pick the model suited to your needs
+3. **Processing starts** — Watch real-time progress with page-by-page status
 
-### Command-Line Mode
+#### Option 2: Direct Command Mode (For automation/scripts)
 
 ```bash
-# With Florence-2-large locally
+ai-drawing-analyzer document.pdf -p huggingface-local -m microsoft/Florence-2-large
+```
+
+### 📋 Common Usage Examples
+
+**Local Processing (No API key needed):**
+```bash
+# Florence-2 Large (best OCR, ~770MB model)
 ai-drawing-analyzer document.pdf -p huggingface-local -m microsoft/Florence-2-large
 
-# With Qwen-VL 7B locally
+# Qwen2-VL 7B (faster, good quality)
 ai-drawing-analyzer document.pdf -p huggingface-local -m Qwen/Qwen2-VL-7B-Instruct
+```
 
-# With HuggingFace Router API (free)
-ai-drawing-analyzer document.pdf -p huggingface -m Qwen/Qwen2.5-VL-7B-Instruct
-
-# With Google Gemini
+**Cloud APIs (Free tier available):**
+```bash
+# Google Gemini (free tier: 60 req/min)
 ai-drawing-analyzer document.pdf -p gemini -m gemini-2.0-flash-exp
 
-# With OpenAI GPT-4o
+# OpenRouter (multi-model access)
+ai-drawing-analyzer document.pdf -p openrouter -m anthropic/claude-3.5-sonnet
+
+# OpenAI GPT-4o
 ai-drawing-analyzer document.pdf -p openai -m gpt-4o
 
-# With Claude 3.5 Sonnet
+# Anthropic Claude 3.5 Sonnet
 ai-drawing-analyzer document.pdf -p anthropic -m claude-3-5-sonnet-20241022
 ```
 
-### Using a Remote PDF URL
-
+**Advanced Options:**
 ```bash
-ai-drawing-analyzer https://example.com/document.pdf -p huggingface-local -m microsoft/Florence-2-large
+# Custom output file + resume capability
+ai-drawing-analyzer document.pdf \
+  -p huggingface-local \
+  -m microsoft/Florence-2-large \
+  -o my_output.jsonl \
+  --resume
+
+# Remote PDF from URL
+ai-drawing-analyzer https://example.com/document.pdf \
+  -p gemini \
+  -m gemini-2.0-flash-exp
+
+# Extract and convert to text in one command
+ai-drawing-analyzer document.pdf \
+  -p huggingface-local \
+  -m microsoft/Florence-2-large \
+  --to-text \
+  --output-text document_complete.txt
 ```
 
 ---
