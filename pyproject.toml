@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-drawing-analyzer"
-version = "2.1.0"
+version = "2.2.0"
 description = "A command-line tool that leverages Vision-Language Models (VLMs) to perform high-quality OCR and analysis on PDF documents"
 readme = "README.md"
 license = {text = "MIT"}
