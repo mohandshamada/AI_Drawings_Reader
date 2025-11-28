@@ -1,0 +1,175 @@
+from typing import List, Dict, Optional
+import httpx
+import base64
+import io
+from PIL import Image
+from .base import BaseClient
+
+# Check for local deps
+try:
+    import torch
+    from transformers import AutoProcessor, AutoModelForCausalLM
+    LOCAL_DEPS_AVAILABLE = True
+except ImportError:
+    LOCAL_DEPS_AVAILABLE = False
+
+
+class HuggingFaceRouterClient(BaseClient):
+    """HuggingFace Router Client (OpenAI-compatible)"""
+    
+    def __init__(self, api_key: str):
+        super().__init__(api_key)
+        self.api_url = "https://router.huggingface.co/v1/chat/completions"
+    
+    async def get_available_models(self) -> List[Dict[str, str]]:
+        return [
+            {"id": "Qwen/Qwen2.5-VL-7B-Instruct", "name": "Qwen2.5-VL 7B (Supported)"},
+            {"id": "mistralai/Pixtral-12B-2409", "name": "Pixtral 12B (Supported Backup)"},
+            {"id": "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16", "name": "NVIDIA Nemotron (Supported Backup)"},
+        ]
+    
+    async def analyze_image(self, image_base64: str, prompt: str, model: str) -> str:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 4096,
+            "stream": False
+        }
+        
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(self.api_url, headers=headers, json=payload)
+                
+                if response.status_code == 400:
+                    err_json = response.json()
+                    msg = err_json.get('error', {}).get('message', str(err_json))
+                    raise Exception(f"Model Not Supported: {msg}")
+                
+                if response.status_code in [401, 403]:
+                    raise Exception(f"Auth Error ({response.status_code}). Check your HF_TOKEN.")
+                    
+                response.raise_for_status()
+                result = response.json()
+                return result["choices"][0]["message"]["content"]
+                
+            except httpx.HTTPStatusError as e:
+                raise Exception(f"HF Router HTTP {e.response.status_code}: {e.response.text}")
+
+
+class HuggingFaceLocalClient(BaseClient):
+    """Local Inference Client"""
+
+    def __init__(self, model_id: str = None):
+        super().__init__(None) # No API Key
+        if not LOCAL_DEPS_AVAILABLE:
+            raise Exception(
+                "⚠️ Transformers and Torch required for local inference.\n"
+                "Install with: pip install transformers torch\n"
+                "For GPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118"
+            )
+        self.model_id = model_id or "microsoft/Florence-2-large"
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.processor = None
+        self.model = None
+        self._load_model()
+
+    def _load_model(self):
+        try:
+            print(f"📥 Loading model: {self.model_id}")
+            print(f"   Device: {self.device.upper()}")
+
+            self.processor = AutoProcessor.from_pretrained(
+                self.model_id,
+                trust_remote_code=True
+            )
+
+            if self.device == "cuda":
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                    trust_remote_code=True
+                )
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id,
+                    trust_remote_code=True
+                ).to(self.device)
+
+            print(f"✅ Model loaded successfully")
+        except Exception as e:
+            raise Exception(f"Failed to load model '{self.model_id}': {str(e)}")
+
+    async def get_available_models(self) -> List[Dict[str, str]]:
+        return [
+            {"id": "microsoft/Florence-2-base", "name": "Florence-2 Base"},
+            {"id": "microsoft/Florence-2-large", "name": "Florence-2 Large"},
+            {"id": "Qwen/Qwen2-VL-7B-Instruct", "name": "Qwen2-VL 7B"},
+            {"id": "llava-hf/llava-1.5-7b-hf", "name": "LLaVA 1.5 7B"},
+        ]
+
+    async def analyze_image(self, image_base64: str, prompt: str, model: str = None) -> str:
+        # Note: Local inference is synchronous/blocking by nature unless offloaded to a thread.
+        # For now, we run it directly, but in a real async app, we might want to use run_in_executor.
+        try:
+            img_data = base64.b64decode(image_base64)
+            image = Image.open(io.BytesIO(img_data))
+            model_id = self.model_id.lower()
+
+            if 'florence' in model_id:
+                task = "<OCR>"
+                inputs = self.processor(text=task, images=image, return_tensors="pt").to(self.device, dtype=self.model.dtype)
+                
+                with torch.no_grad():
+                    generated_ids = self.model.generate(
+                        input_ids=inputs["input_ids"],
+                        pixel_values=inputs["pixel_values"],
+                        max_new_tokens=1024,
+                        num_beams=3,
+                        do_sample=False
+                    )
+                
+                generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+                parsed_answer = self.processor.post_process_generation(
+                    generated_text,
+                    task=task,
+                    image_size=(image.width, image.height)
+                )
+                
+                if isinstance(parsed_answer, dict):
+                    extracted_text = parsed_answer.get('<OCR>', '')
+                    return extracted_text if extracted_text else "No text detected in image"
+                else:
+                    return str(parsed_answer)
+            else:
+                inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
+                with torch.no_grad():
+                    generated_ids = self.model.generate(
+                        input_ids=inputs["input_ids"],
+                        pixel_values=inputs.get("pixel_values"),
+                        max_new_tokens=1024,
+                        num_beams=3,
+                    )
+                generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+                return generated_text
+
+        except Exception as e:
+            raise Exception(f"Error analyzing image: {str(e)}")
