@@ -7,7 +7,7 @@ name = "ai-drawing-analyzer"
 version = "2.2.0"
 description = "A command-line tool that leverages Vision-Language Models (VLMs) to perform high-quality OCR and analysis on PDF documents"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "Mohandshamada"}
 ]
