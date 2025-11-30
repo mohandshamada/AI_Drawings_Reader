@@ -155,10 +155,23 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Interactive mode (recommended)
   ai-drawing-analyzer document.pdf
-  ai-drawing-analyzer document.pdf --provider openai --model gpt-4o
-  ai-drawing-analyzer document.pdf --resume --output output.jsonl
+
+  # Specify provider and model
+  ai-drawing-analyzer document.pdf -p openai -m gpt-4o
+
+  # Resume interrupted processing
+  ai-drawing-analyzer document.pdf --resume -o output.jsonl
+
+  # Export to multiple formats
+  ai-drawing-analyzer document.pdf -p gemini -m gemini-2.0-flash-exp --to-text --to-toon
+
+  # Convert JSONL to text
   ai-drawing-analyzer output.jsonl --to-text --output-text document.txt
+
+  # Export to Toon format (requires Node.js: pnpm install)
+  ai-drawing-analyzer document.pdf -p huggingface-local -m microsoft/Florence-2-large --to-toon
         """
     )
     parser.add_argument('pdf', help='PDF file path, URL, or JSONL file for conversion')
@@ -236,8 +249,10 @@ Examples:
                         logger.info(f"Converting output to Toon format: {toon_output}")
                         toon_converter = ToonConverter()
                         toon_converter.convert(output_file, toon_output)
+                        logger.info(f"✅ Toon format export complete: {toon_output}")
                     except RuntimeError as e:
                         logger.warning(f"Toon conversion skipped: {e}")
+                        logger.warning(f"   Install Node.js dependencies: pnpm install")
                     except Exception as e:
                         logger.error(f"Toon conversion failed: {e}")
 

@@ -173,14 +173,23 @@ ai-drawing-analyzer technical_drawing.pdf -p huggingface-local -m microsoft/Flor
 #!/bin/bash
 # Process all PDFs in a directory
 
+# Create output directory
+mkdir -p output
+
 for pdf in *.pdf; do
-  echo "Processing $pdf..."
+  filename=$(basename "$pdf" .pdf)
+  echo "Processing $filename..."
+
   ai-drawing-analyzer "$pdf" \
     -p gemini -m gemini-2.0-flash-exp \
-    -o "${pdf%.pdf}_output.jsonl" \
+    -o "output/${filename}.jsonl" \
     --resume --to-text --to-toon
+
+  echo "✅ $filename complete (JSONL, TXT, and TOON formats)"
 done
-echo "✅ All documents processed!"
+
+echo "🎉 All documents processed!"
+echo "Output: output/ directory"
 ```
 
 ---
@@ -422,6 +431,9 @@ cat > batch_process.sh << 'EOF'
 PROVIDER="gemini"
 MODEL="gemini-2.0-flash-exp"
 
+# Create output directory
+mkdir -p output
+
 for pdf in documents/*.pdf; do
   filename=$(basename "$pdf" .pdf)
   echo "📄 Processing: $filename"
@@ -432,12 +444,15 @@ for pdf in documents/*.pdf; do
     -o "output/${filename}.jsonl" \
     --resume \
     --to-text \
-    --output-text "output/${filename}.txt"
+    --output-text "output/${filename}.txt" \
+    --to-toon \
+    --output-toon "output/${filename}.toon"
 
-  echo "✅ Completed: $filename"
+  echo "✅ Completed: $filename (JSONL + TXT + TOON)"
 done
 
 echo "🎉 All documents processed!"
+echo "📁 Output: ./output/ directory"
 EOF
 
 chmod +x batch_process.sh
@@ -495,13 +510,25 @@ ai-drawing-analyzer "$DOCUMENT" \
 diff test_florence.jsonl test_gemini.jsonl
 ```
 
-### Tutorial 5: Export to Toon Format
+### Tutorial 5: Export to Toon Format ✨
+
+**What is Toon Format?**
+Toon is a space-efficient, structured binary format optimized for document content. It's perfect for:
+- **Storage Efficiency:** 30-50% smaller than JSONL
+- **Fast Processing:** Binary format for quick parsing
+- **Tool Compatibility:** Works with Toon-compatible processors and pipelines
+- **Structured Data:** Maintains document hierarchy and metadata
+
+**Setup:**
+```bash
+# Install Node.js dependencies (one-time setup)
+pnpm install  # or: npm install
+```
+
+**Usage Examples:**
 
 ```bash
-# Requires Node.js
-pnpm install
-
-# Process and export to Toon format
+# 1. Process PDF and export to Toon format
 ai-drawing-analyzer document.pdf \
   -p gemini \
   -m gemini-2.0-flash-exp \
@@ -511,9 +538,55 @@ ai-drawing-analyzer document.pdf \
 # - output_ocr_20250130_123456.jsonl (OCR results)
 # - output_ocr_20250130_123456.toon (Toon format)
 
-# Toon format is more compact and structured
-# Perfect for further processing with Toon-compatible tools
+# 2. Custom Toon output path
+ai-drawing-analyzer blueprint.pdf \
+  -p huggingface-local \
+  -m microsoft/Florence-2-large \
+  -o blueprint.jsonl \
+  --to-toon \
+  --output-toon blueprint.toon
+
+# 3. Convert existing JSONL to Toon
+node scripts/convert_to_toon.mjs existing_output.jsonl output.toon
+
+# 4. Batch process with Toon export
+for pdf in *.pdf; do
+  ai-drawing-analyzer "$pdf" \
+    -p gemini -m gemini-2.0-flash-exp \
+    --to-toon --to-text
+done
+
+# Creates both .toon and .txt files for each PDF
 ```
+
+**Output Format:**
+```javascript
+{
+  metadata: {
+    source: 'ai-drawing-analyzer',
+    version: '2.2.0',
+    timestamp: '2025-01-30T...',
+    totalPages: 195
+  },
+  content: [
+    {
+      page: 1,
+      type: 'image',
+      text: '...',
+      provider: 'gemini',
+      model: 'gemini-2.0-flash-exp'
+    },
+    // ... more pages
+  ]
+}
+```
+
+**When to Use Toon Format:**
+- ✅ Building document processing pipelines
+- ✅ Need compact storage for large document sets
+- ✅ Integrating with Toon-compatible tools
+- ✅ Archiving OCR results long-term
+- ❌ Need human-readable output (use --to-text instead)
 
 ---
 
