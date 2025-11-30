@@ -11,7 +11,12 @@ from ..utils.logging import logger
 # Check for local deps
 try:
     import torch
-    from transformers import AutoProcessor, AutoModelForCausalLM
+    from transformers import (
+        AutoProcessor,
+        AutoModelForCausalLM,
+        AutoModelForVision2Seq,
+        Qwen2VLForConditionalGeneration,
+    )
     LOCAL_DEPS_AVAILABLE = True
 except ImportError:
     LOCAL_DEPS_AVAILABLE = False
@@ -104,15 +109,35 @@ class HuggingFaceLocalClient(BaseClient):
                 trust_remote_code=True
             )
 
+            # Determine correct model class based on model type
+            model_lower = self.model_id.lower()
+
+            if 'qwen2-vl' in model_lower or 'qwen2_vl' in model_lower:
+                # Qwen2-VL models require specific class
+                ModelClass = Qwen2VLForConditionalGeneration
+                logger.info("   Using Qwen2VLForConditionalGeneration")
+            elif 'florence' in model_lower:
+                # Florence models use AutoModelForCausalLM
+                ModelClass = AutoModelForCausalLM
+                logger.info("   Using AutoModelForCausalLM")
+            elif 'llava' in model_lower or 'vision' in model_lower:
+                # LLaVA and other vision models
+                ModelClass = AutoModelForVision2Seq
+                logger.info("   Using AutoModelForVision2Seq")
+            else:
+                # Default to CausalLM for other models
+                ModelClass = AutoModelForCausalLM
+                logger.info("   Using AutoModelForCausalLM (default)")
+
             if self.device == "cuda":
-                self.model = AutoModelForCausalLM.from_pretrained(
+                self.model = ModelClass.from_pretrained(
                     self.model_id,
                     torch_dtype=torch.float16,
                     device_map="auto",
                     trust_remote_code=True
                 )
             else:
-                self.model = AutoModelForCausalLM.from_pretrained(
+                self.model = ModelClass.from_pretrained(
                     self.model_id,
                     trust_remote_code=True
                 ).to(self.device)
@@ -143,6 +168,7 @@ class HuggingFaceLocalClient(BaseClient):
             model_id = self.model_id.lower()
 
             if 'florence' in model_id:
+                # Florence-2 models use task prompts
                 task = "<OCR>"
                 inputs = self.processor(text=task, images=image, return_tensors="pt").to(self.device, dtype=self.model.dtype)
 
@@ -167,12 +193,47 @@ class HuggingFaceLocalClient(BaseClient):
                     return extracted_text if extracted_text else "No text detected in image"
                 else:
                     return str(parsed_answer)
+
+            elif 'qwen2-vl' in model_id or 'qwen2_vl' in model_id:
+                # Qwen2-VL models use chat format
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image", "image": image},
+                            {"type": "text", "text": prompt}
+                        ]
+                    }
+                ]
+
+                text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                inputs = self.processor(text=[text], images=[image], return_tensors="pt").to(self.device)
+
+                with torch.no_grad():
+                    generated_ids = self.model.generate(
+                        **inputs,
+                        max_new_tokens=1024,
+                        do_sample=False
+                    )
+
+                # Trim input tokens from output
+                generated_ids_trimmed = [
+                    out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+                ]
+
+                output_text = self.processor.batch_decode(
+                    generated_ids_trimmed,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False
+                )
+                return output_text[0]
+
             else:
+                # Generic vision-language models
                 inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
                 with torch.no_grad():
                     generated_ids = self.model.generate(
-                        input_id=inputs["input_ids"],
-                        pixel_values=inputs.get("pixel_values"),
+                        **inputs,
                         max_new_tokens=1024,
                         num_beams=3,
                     )
