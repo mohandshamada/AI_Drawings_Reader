@@ -1,0 +1,20 @@
+{
+  "name": "ai-drawing-analyzer-toon",
+  "version": "2.2.0",
+  "description": "Toon format converter for AI Drawing Analyzer",
+  "type": "module",
+  "scripts": {
+    "install": "pnpm install"
+  },
+  "dependencies": {
+    "@toon-format/toon": "latest"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "toon",
+    "format",
+    "converter"
+  ],
+  "author": "Mohandshamada",
+  "license": "MIT"
+}

@@ -53,3 +53,17 @@ tmp_downloads/
 output_ocr_*.jsonl
 output_ocr_*.json
 drawing_complete.txt
+*.toon
+
+# Cache
+.cache/
+
+# Node.js
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/

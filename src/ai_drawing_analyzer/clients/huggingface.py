@@ -2,8 +2,11 @@ from typing import List, Dict, Optional
 import httpx
 import base64
 import io
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 from .base import BaseClient
+from ..utils.logging import logger
 
 # Check for local deps
 try:
@@ -93,8 +96,8 @@ class HuggingFaceLocalClient(BaseClient):
 
     def _load_model(self):
         try:
-            print(f"📥 Loading model: {self.model_id}")
-            print(f"   Device: {self.device.upper()}")
+            logger.info(f"📥 Loading model: {self.model_id}")
+            logger.info(f"   Device: {self.device.upper()}")
 
             self.processor = AutoProcessor.from_pretrained(
                 self.model_id,
@@ -114,7 +117,7 @@ class HuggingFaceLocalClient(BaseClient):
                     trust_remote_code=True
                 ).to(self.device)
 
-            print(f"✅ Model loaded successfully")
+            logger.info(f"✅ Model loaded successfully")
         except Exception as e:
             raise Exception(f"Failed to load model '{self.model_id}': {str(e)}")
 
@@ -127,8 +130,13 @@ class HuggingFaceLocalClient(BaseClient):
         ]
 
     async def analyze_image(self, image_base64: str, prompt: str, model: str = None) -> str:
-        # Note: Local inference is synchronous/blocking by nature unless offloaded to a thread.
-        # For now, we run it directly, but in a real async app, we might want to use run_in_executor.
+        """Analyze image using local model inference (runs in thread pool for async compatibility)"""
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor() as pool:
+            return await loop.run_in_executor(pool, self._run_inference, image_base64, prompt)
+
+    def _run_inference(self, image_base64: str, prompt: str) -> str:
+        """Run synchronous model inference"""
         try:
             img_data = base64.b64decode(image_base64)
             image = Image.open(io.BytesIO(img_data))
@@ -137,7 +145,7 @@ class HuggingFaceLocalClient(BaseClient):
             if 'florence' in model_id:
                 task = "<OCR>"
                 inputs = self.processor(text=task, images=image, return_tensors="pt").to(self.device, dtype=self.model.dtype)
-                
+
                 with torch.no_grad():
                     generated_ids = self.model.generate(
                         input_ids=inputs["input_ids"],
@@ -146,14 +154,14 @@ class HuggingFaceLocalClient(BaseClient):
                         num_beams=3,
                         do_sample=False
                     )
-                
+
                 generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
                 parsed_answer = self.processor.post_process_generation(
                     generated_text,
                     task=task,
                     image_size=(image.width, image.height)
                 )
-                
+
                 if isinstance(parsed_answer, dict):
                     extracted_text = parsed_answer.get('<OCR>', '')
                     return extracted_text if extracted_text else "No text detected in image"
@@ -163,7 +171,7 @@ class HuggingFaceLocalClient(BaseClient):
                 inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
                 with torch.no_grad():
                     generated_ids = self.model.generate(
-                        input_ids=inputs["input_ids"],
+                        input_id=inputs["input_ids"],
                         pixel_values=inputs.get("pixel_values"),
                         max_new_tokens=1024,
                         num_beams=3,
