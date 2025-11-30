@@ -134,28 +134,41 @@ class HuggingFaceLocalClient(BaseClient):
 
             # Load model with appropriate settings
             if self.device == "cuda":
-                try:
-                    # Try with device_map (requires accelerate)
-                    self.model = ModelClass.from_pretrained(
-                        self.model_id,
-                        torch_dtype=torch.float16,
-                        device_map="auto",
-                        trust_remote_code=True
-                    )
-                except ImportError as e:
-                    logger.warning(f"   Accelerate not available, loading without device_map")
-                    logger.warning(f"   Install with: pip install 'accelerate>=0.26.0'")
-                    # Fallback: load without device_map
+                # Florence models don't support device_map='auto'
+                if 'florence' in model_lower:
                     self.model = ModelClass.from_pretrained(
                         self.model_id,
                         torch_dtype=torch.float16,
                         trust_remote_code=True
                     ).to(self.device)
+                else:
+                    try:
+                        # Try with device_map for models that support it (Qwen2-VL, LLaVA, etc.)
+                        self.model = ModelClass.from_pretrained(
+                            self.model_id,
+                            torch_dtype=torch.float16,
+                            device_map="auto",
+                            trust_remote_code=True
+                        )
+                    except (ImportError, ValueError) as e:
+                        logger.warning(f"   Cannot use device_map='auto', loading directly to device")
+                        # Fallback: load without device_map
+                        self.model = ModelClass.from_pretrained(
+                            self.model_id,
+                            torch_dtype=torch.float16,
+                            trust_remote_code=True
+                        ).to(self.device)
             else:
-                self.model = ModelClass.from_pretrained(
-                    self.model_id,
-                    trust_remote_code=True
-                ).to(self.device)
+                # CPU mode
+                if 'qwen' in model_lower or 'florence' in model_lower:
+                    self.model = ModelClass.from_pretrained(
+                        self.model_id,
+                        trust_remote_code=True
+                    ).to(self.device)
+                else:
+                    self.model = ModelClass.from_pretrained(
+                        self.model_id
+                    ).to(self.device)
 
             logger.info(f"✅ Model loaded successfully")
         except Exception as e:
