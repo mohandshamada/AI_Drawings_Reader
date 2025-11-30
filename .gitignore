@@ -67,3 +67,4 @@ pnpm-lock.yaml
 .coverage
 coverage.xml
 htmlcov/
+test_output.*

@@ -1,172 +1,171 @@
 #!/bin/bash
-# Installation script for PDF Analyzer CLI (Linux/Mac)
-# Supports Florence-2 and any Hugging Face vision model
-# Uses uv for dependency management
+#
+# AI Drawing Analyzer - One-Time Installation Script
+# This script installs all dependencies required to run the tool
+#
 
-echo "🚀 AI Drawing Analyzer - Installation (Linux/macOS)"
-echo "======================================================"
-echo ""
-echo "This script will help you set up the PDF Analyzer for:"
-echo "  ✅ Florence-2 OCR (local, no API key)"
-echo "  ✅ Any Hugging Face vision model locally"
-echo "  ✅ Cloud APIs (Google Gemini, OpenAI, Anthropic, etc.)"
+set -e  # Exit on error
+
+echo "🚀 AI Drawing Analyzer - Installation Script"
+echo "=============================================="
 echo ""
 
 # Check Python version
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is not installed. Please install Python 3.8 or higher."
+echo "📌 Checking Python version..."
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}' | cut -d. -f1,2)
+REQUIRED_VERSION="3.9"
+
+if (( $(echo "$PYTHON_VERSION < $REQUIRED_VERSION" | bc -l) )); then
+    echo "❌ Python $REQUIRED_VERSION or higher is required (found $PYTHON_VERSION)"
     exit 1
 fi
-
-PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-echo "✅ Found Python $PYTHON_VERSION"
-
-# Check and install uv if needed
-if ! command -v uv &> /dev/null; then
-    echo ""
-    echo "📦 Installing uv (Python package manager)..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.local/bin:$PATH"
-    if ! command -v uv &> /dev/null; then
-        echo "❌ Failed to install uv. Please install manually from https://astral.sh/uv"
-        exit 1
-    fi
-    echo "✅ uv installed successfully"
-else
-    echo "✅ Found uv ($(uv --version))"
-fi
-
-# Ask user for installation type
-echo ""
-echo "Choose your installation type:"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "1️⃣  LOCAL MODELS ONLY (Recommended)"
-echo "   • Run Florence-2, Qwen-VL, Qwen3-VL, LLaVA locally"
-echo "   • No API key required"
-echo "   • Best for: Technical drawings, blueprints"
-echo ""
-echo "2️⃣  CLOUD APIs ONLY (Minimal)"
-echo "   • Use Gemini, OpenAI, Claude, etc."
-echo "   • Requires API keys"
-echo "   • Best for: Quick testing, occasional use"
-echo ""
-echo "3️⃣  BOTH LOCAL & CLOUD (Full Setup)"
-echo "   • All features: local models + cloud APIs"
-echo "   • Choose which to use at runtime"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-read -p "Enter choice (1-3) [default: 1]: " choice
-choice=${choice:-1}
-
-# Install dependencies based on choice
-echo ""
-echo "📥 Installing dependencies with uv..."
-echo "   (This may take 2-5 minutes depending on your internet)"
+echo "✅ Python $PYTHON_VERSION detected"
 echo ""
 
-case $choice in
+# Installation options
+echo "📋 Installation Options:"
+echo ""
+echo "1. Minimal - Core dependencies only (cloud APIs)"
+echo "2. Local  - With local model support (requires ~10GB disk space)"
+echo "3. Full   - Everything including development tools"
+echo "4. Dev    - Development only (testing, linting, formatting)"
+echo ""
+read -p "Select installation type (1-4): " INSTALL_TYPE
+echo ""
+
+case $INSTALL_TYPE in
     1)
-        echo "📚 Installing LOCAL MODEL SUPPORT..."
-        echo "   • transformers, torch, timm, einops"
-        uv sync --extra local
-        echo ""
-        echo "🚀 GPU ACCELERATION (Optional but Recommended)"
-        echo "   To use GPU (CUDA 11.8) for 10-100x faster inference:"
-        echo ""
-        echo "   uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118"
-        echo ""
-        echo "   For other CUDA versions, visit: https://pytorch.org/get-started/locally/"
+        INSTALL_EXTRAS=""
+        INSTALL_NAME="Minimal"
         ;;
     2)
-        echo "☁️  Installing CLOUD API SUPPORT..."
-        echo "   • httpx, pymupdf, Pillow, google-auth, etc."
-        uv sync
-        echo ""
+        INSTALL_EXTRAS=".[local]"
+        INSTALL_NAME="Local"
         ;;
     3)
-        echo "🔗 Installing FULL SETUP (Local + Cloud)..."
-        echo "   • All local model dependencies"
-        echo "   • All cloud API dependencies"
-        uv sync --all-extras
-        echo ""
-        echo "🚀 GPU ACCELERATION (Optional but Recommended)"
-        echo "   To use GPU (CUDA 11.8) for faster inference:"
-        echo ""
-        echo "   uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118"
-        echo ""
+        INSTALL_EXTRAS=".[full,dev]"
+        INSTALL_NAME="Full"
+        ;;
+    4)
+        INSTALL_EXTRAS=".[dev]"
+        INSTALL_NAME="Development"
         ;;
     *)
-        echo "❓ Invalid choice. Using LOCAL MODELS (option 1) by default..."
-        uv sync --extra local
+        echo "❌ Invalid selection"
+        exit 1
         ;;
 esac
 
-# Create .env from example if it doesn't exist
-if [ ! -f .env ]; then
-    if [ -f .env.example ]; then
-        echo ""
-        echo "📝 Creating .env file from template..."
-        cp .env.example .env
-        if [ "$choice" = "1" ]; then
-            echo "✅ .env file created (not needed for local models)"
-        else
-            echo "✅ .env file created. Configure API keys to use cloud providers."
-        fi
-    fi
-fi
-
-echo ""
-echo "======================================================"
-echo "✅ Installation Complete!"
-echo "======================================================"
-echo ""
-echo "🎯 NEXT STEPS:"
+echo "📦 Installing: $INSTALL_NAME"
 echo ""
 
-if [ "$choice" = "1" ]; then
-    echo "1️⃣  Activate environment:"
-    echo "    source .venv/bin/activate"
-    echo ""
-    echo "2️⃣  Test with Florence-2 (interactive):"
-    echo "    ai-drawing-analyzer your_document.pdf"
-    echo ""
-    echo "3️⃣  Or use command-line directly:"
-    echo "    ai-drawing-analyzer doc.pdf -p huggingface-local -m microsoft/Florence-2-large"
-    echo ""
-    echo "📊 First run will download the model (~2-24GB, takes 5-10 minutes)"
-    echo "   Model is cached afterwards for fast reuse"
-elif [ "$choice" = "2" ]; then
-    echo "1️⃣  Activate environment:"
-    echo "    source .venv/bin/activate"
-    echo ""
-    echo "2️⃣  Add API keys to .env file:"
-    echo "    nano .env"
-    echo ""
-    echo "3️⃣  Test with Gemini (free tier):"
-    echo "    ai-drawing-analyzer your_document.pdf -p gemini"
-    echo ""
-    echo "🆓 Get free API keys:"
-    echo "   • Google Gemini: https://makersuite.google.com/app/apikey"
-    echo "   • HuggingFace Router: https://huggingface.co/settings/tokens"
+# Create virtual environment
+if [ ! -d "venv" ]; then
+    echo "🔧 Creating virtual environment..."
+    python3 -m venv venv
+    echo "✅ Virtual environment created"
 else
-    echo "1️⃣  Activate environment:"
-    echo "    source .venv/bin/activate"
-    echo ""
-    echo "2️⃣  Choose your path:"
-    echo ""
-    echo "   LOCAL (no API key):"
-    echo "   ai-drawing-analyzer doc.pdf -p huggingface-local"
-    echo ""
-    echo "   CLOUD (with API key):"
-    echo "   nano .env  (add your API keys)"
-    echo "   ai-drawing-analyzer doc.pdf -p gemini"
+    echo "✅ Virtual environment already exists"
+fi
+echo ""
+
+# Activate virtual environment
+echo "🔧 Activating virtual environment..."
+source venv/bin/activate
+echo ""
+
+# Upgrade pip
+echo "📦 Upgrading pip..."
+pip install --upgrade pip > /dev/null 2>&1
+echo "✅ pip upgraded"
+echo ""
+
+# Install Python dependencies
+echo "📦 Installing Python dependencies..."
+if [ -n "$INSTALL_EXTRAS" ]; then
+    pip install -e "$INSTALL_EXTRAS"
+else
+    pip install -e .
+fi
+echo "✅ Python dependencies installed"
+echo ""
+
+# Install Node.js dependencies for Toon format
+read -p "📦 Install Node.js dependencies for Toon format export? (y/n): " INSTALL_NODE
+
+if [[ "$INSTALL_NODE" =~ ^[Yy]$ ]]; then
+    if command -v npm &> /dev/null; then
+        echo "🔧 Installing Node.js dependencies..."
+        npm install
+        echo "✅ Node.js dependencies installed"
+    elif command -v pnpm &> /dev/null; then
+        echo "🔧 Installing Node.js dependencies with pnpm..."
+        pnpm install
+        echo "✅ Node.js dependencies installed"
+    else
+        echo "⚠️  Node.js/npm not found. Skipping Toon format support."
+        echo "   Install Node.js from: https://nodejs.org/"
+    fi
     echo ""
 fi
 
+# GPU Setup for local models
+if [[ "$INSTALL_TYPE" == "2" ]] || [[ "$INSTALL_TYPE" == "3" ]]; then
+    echo ""
+    read -p "🎮 Do you have an NVIDIA GPU and want GPU acceleration? (y/n): " INSTALL_GPU
+
+    if [[ "$INSTALL_GPU" =~ ^[Yy]$ ]]; then
+        echo "🔧 Installing PyTorch with CUDA support..."
+        echo "   This will download ~2GB of data..."
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+        echo "✅ GPU support installed"
+    fi
+    echo ""
+fi
+
+# Verify installation
+echo "🔍 Verifying installation..."
 echo ""
-echo "📖 Documentation:"
-echo "   • Quick Start: QUICK_START.md"
-echo "   • Full Guide: README.md"
-echo "   • Help: ai-drawing-analyzer --help"
+
+# Check if command is available
+if command -v ai-drawing-analyzer &> /dev/null; then
+    echo "✅ ai-drawing-analyzer command installed successfully"
+else
+    echo "❌ Installation failed: ai-drawing-analyzer command not found"
+    exit 1
+fi
+
+# Test import
+python3 -c "import ai_drawing_analyzer; print('✅ Python package imports successfully')" || {
+    echo "❌ Installation failed: Cannot import package"
+    exit 1
+}
+
 echo ""
-echo "======================================================"
+echo "✨ Installation Complete!"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "Next Steps:"
+echo ""
+echo "1. Activate the virtual environment:"
+echo "   source venv/bin/activate"
+echo ""
+echo "2. Set up API keys in .env file:"
+echo "   cp .env.example .env  # If .env.example exists"
+echo "   nano .env"
+echo ""
+echo "3. Run the tool:"
+echo "   ai-drawing-analyzer your_document.pdf"
+echo ""
+echo "4. For help:"
+echo "   ai-drawing-analyzer --help"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# Save activation hint
+echo ""
+echo "💡 Tip: To use the tool in future sessions, run:"
+echo "   source venv/bin/activate"
 echo ""

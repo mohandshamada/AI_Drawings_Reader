@@ -34,7 +34,36 @@ AI Drawing Analyzer uses cutting-edge Vision-Language Models to extract text fro
 
 ## 🚀 Quick Start
 
-### Installation
+### One-Time Installation (Recommended ⭐)
+
+**Use the automated installation script for the easiest setup:**
+
+```bash
+# Clone the repository
+git clone https://github.com/mohandshamada/AI_Drawings_Reader.git
+cd AI_Drawings_Reader
+
+# Run the interactive installation script
+bash install.sh
+```
+
+The script will:
+- ✅ Check Python version (3.9+ required)
+- ✅ Create virtual environment
+- ✅ Install Python dependencies based on your selection
+- ✅ Optionally install Node.js dependencies (for Toon format)
+- ✅ Optionally install GPU support
+- ✅ Verify installation
+
+**Installation Types:**
+1. **Minimal** - Core dependencies only (~50MB) - Perfect for cloud APIs
+2. **Local** - With local model support (~10GB) - Run models locally
+3. **Full** - Everything including dev tools - For contributors
+4. **Dev** - Development tools only - For testing/linting
+
+---
+
+### Manual Installation
 
 #### Basic Installation
 ```bash
@@ -42,24 +71,27 @@ AI Drawing Analyzer uses cutting-edge Vision-Language Models to extract text fro
 git clone https://github.com/mohandshamada/AI_Drawings_Reader.git
 cd AI_Drawings_Reader
 
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
 # Install the package
 pip install -e .
 ```
 
 #### With Local Models (Florence-2, Qwen, LLaVA)
 ```bash
+# Install with local model support
 pip install -e ".[local]"
 
-# For GPU acceleration (10-100x faster)
+# For GPU acceleration (10-100x faster, NVIDIA GPUs only)
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
 
 #### With Toon Format Support
 ```bash
 # Install Node.js dependencies
-pnpm install
-# or
-npm install
+npm install  # or: pnpm install
 
 # Then install Python package
 pip install -e .
