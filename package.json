@@ -4,7 +4,7 @@
   "description": "Toon format converter for AI Drawing Analyzer",
   "type": "module",
   "scripts": {
-    "install": "pnpm install"
+    "convert": "node scripts/convert_to_toon.mjs"
   },
   "dependencies": {
     "@toon-format/toon": "latest"
