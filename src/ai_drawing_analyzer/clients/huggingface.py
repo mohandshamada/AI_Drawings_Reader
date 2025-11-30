@@ -104,14 +104,17 @@ class HuggingFaceLocalClient(BaseClient):
             logger.info(f"📥 Loading model: {self.model_id}")
             logger.info(f"   Device: {self.device.upper()}")
 
-            self.processor = AutoProcessor.from_pretrained(
-                self.model_id,
-                trust_remote_code=True
-            )
+            # Load processor (trust_remote_code only for models that need it)
+            model_lower = self.model_id.lower()
+            if 'qwen' in model_lower or 'florence' in model_lower:
+                self.processor = AutoProcessor.from_pretrained(
+                    self.model_id,
+                    trust_remote_code=True
+                )
+            else:
+                self.processor = AutoProcessor.from_pretrained(self.model_id)
 
             # Determine correct model class based on model type
-            model_lower = self.model_id.lower()
-
             if 'qwen2-vl' in model_lower or 'qwen2_vl' in model_lower:
                 # Qwen2-VL models require specific class
                 ModelClass = Qwen2VLForConditionalGeneration
@@ -129,13 +132,25 @@ class HuggingFaceLocalClient(BaseClient):
                 ModelClass = AutoModelForCausalLM
                 logger.info("   Using AutoModelForCausalLM (default)")
 
+            # Load model with appropriate settings
             if self.device == "cuda":
-                self.model = ModelClass.from_pretrained(
-                    self.model_id,
-                    torch_dtype=torch.float16,
-                    device_map="auto",
-                    trust_remote_code=True
-                )
+                try:
+                    # Try with device_map (requires accelerate)
+                    self.model = ModelClass.from_pretrained(
+                        self.model_id,
+                        torch_dtype=torch.float16,
+                        device_map="auto",
+                        trust_remote_code=True
+                    )
+                except ImportError as e:
+                    logger.warning(f"   Accelerate not available, loading without device_map")
+                    logger.warning(f"   Install with: pip install 'accelerate>=0.26.0'")
+                    # Fallback: load without device_map
+                    self.model = ModelClass.from_pretrained(
+                        self.model_id,
+                        torch_dtype=torch.float16,
+                        trust_remote_code=True
+                    ).to(self.device)
             else:
                 self.model = ModelClass.from_pretrained(
                     self.model_id,
@@ -144,7 +159,14 @@ class HuggingFaceLocalClient(BaseClient):
 
             logger.info(f"✅ Model loaded successfully")
         except Exception as e:
-            raise Exception(f"Failed to load model '{self.model_id}': {str(e)}")
+            error_msg = str(e)
+            if "accelerate" in error_msg.lower():
+                raise Exception(
+                    f"Failed to load model '{self.model_id}': Missing 'accelerate' package.\n"
+                    f"Install with: pip install 'accelerate>=0.26.0'\n"
+                    f"Or reinstall with: pip install -e '.[local]'"
+                )
+            raise Exception(f"Failed to load model '{self.model_id}': {error_msg}")
 
     async def get_available_models(self) -> List[Dict[str, str]]:
         return [

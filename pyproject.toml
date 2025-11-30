@@ -36,15 +36,17 @@ local = [
     "torch>=2.6.0",
     "timm==0.9.16",
     "einops==0.8.0",
+    "accelerate>=0.26.0",
 ]
 
 minimal = []
 
 full = [
     "transformers==4.47.1",
-    "torch==2.5.1",
+    "torch>=2.6.0",
     "timm==0.9.16",
     "einops==0.8.0",
+    "accelerate>=0.26.0",
 ]
 
 dev = [
