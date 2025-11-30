@@ -3,6 +3,7 @@ import sys
 import os
 import json
 import asyncio
+import httpx
 from datetime import datetime
 from typing import Optional, Set
 from tqdm import tqdm
@@ -10,6 +11,7 @@ from tqdm import tqdm
 from .clients.factory import ClientFactory
 from .processing.pdf import PDFProcessor
 from .converters.jsonl_to_text import DrawingTextConverter
+from .converters.toon_converter import ToonConverter
 from .utils.config import load_env_file, AppConfig
 from .utils.files import detect_and_download
 from .utils.logging import logger
@@ -170,6 +172,8 @@ Examples:
     parser.add_argument('--to-text', action='store_true', help='Convert JSONL to formatted text')
     parser.add_argument('--output-text', default='drawing_complete.txt',
                         help='Output text file path for --to-text (default: drawing_complete.txt)')
+    parser.add_argument('--to-toon', action='store_true', help='Convert output to Toon format')
+    parser.add_argument('--output-toon', help='Output Toon file path (default: auto-generated)')
 
     args = parser.parse_args()
 
@@ -226,14 +230,32 @@ Examples:
                     converter = DrawingTextConverter(output_file)
                     converter.convert(args.output_text)
 
+                if args.to_toon and output_file:
+                    try:
+                        toon_output = args.output_toon or output_file.replace('.jsonl', '.toon')
+                        logger.info(f"Converting output to Toon format: {toon_output}")
+                        toon_converter = ToonConverter()
+                        toon_converter.convert(output_file, toon_output)
+                    except RuntimeError as e:
+                        logger.warning(f"Toon conversion skipped: {e}")
+                    except Exception as e:
+                        logger.error(f"Toon conversion failed: {e}")
+
             except KeyError as e:
                 logger.error(f"Missing API key: {e}. Set the environment variable or use --api-key")
             except ValueError as e:
                 logger.error(f"Configuration error: {e}")
+            except httpx.HTTPError as e:
+                logger.error(f"Network error: {e}")
+            except httpx.TimeoutException as e:
+                logger.error(f"Request timeout: {e}")
+            except FileNotFoundError as e:
+                logger.error(f"File not found: {e}")
             except Exception as e:
-                logger.error(f"Application error: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"Unexpected error: {e}")
+                if os.getenv("DEBUG"):
+                    import traceback
+                    traceback.print_exc()
 
         asyncio.run(run_app())
 
