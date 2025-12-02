@@ -12,9 +12,26 @@ from .clients.factory import ClientFactory
 from .processing.pdf import PDFProcessor
 from .converters.jsonl_to_text import DrawingTextConverter
 from .converters.toon_converter import ToonConverter
+from .converters.ifc_converter import IFCConverter
+from .converters.dwg_converter import DWGConverter
 from .utils.config import load_env_file, AppConfig
 from .utils.files import detect_and_download
 from .utils.logging import logger
+
+
+def get_file_type(file_path: str) -> str:
+    """Determine file type from extension"""
+    ext = os.path.splitext(file_path.lower())[1]
+    if ext == '.pdf':
+        return 'pdf'
+    elif ext == '.ifc':
+        return 'ifc'
+    elif ext in ('.dwg', '.dxf'):
+        return 'cad'
+    elif ext in ('.json', '.jsonl'):
+        return 'jsonl'
+    else:
+        return 'unknown'
 
 def get_processed_pages(output_file: str) -> Set[int]:
     """Get set of already processed pages from output file"""
@@ -151,7 +168,7 @@ async def interactive_model_selection(client, provider: str) -> Optional[str]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="AI Drawing Analyzer: Extract text from PDFs using Vision Language Models",
+        description="AI Drawing Analyzer: Extract text from PDFs, analyze IFC/DWG files using Vision Language Models",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -172,15 +189,27 @@ Examples:
 
   # Export to Toon format (requires Node.js: pnpm install)
   ai-drawing-analyzer document.pdf -p huggingface-local -m microsoft/Florence-2-large --to-toon
+
+  # Convert IFC file to JSON (BIM analysis with clash detection)
+  ai-drawing-analyzer model.ifc --to-json
+
+  # Analyze IFC for LLM with clash detection
+  ai-drawing-analyzer model.ifc --analyze
+
+  # Convert DWG/DXF file to JSON (CAD analysis)
+  ai-drawing-analyzer drawing.dwg --to-json
+
+  # Convert IFC to Toon format
+  ai-drawing-analyzer model.ifc --to-toon
         """
     )
-    parser.add_argument('pdf', help='PDF file path, URL, or JSONL file for conversion')
+    parser.add_argument('input', help='Input file: PDF, IFC, DWG, DXF, or JSONL')
     parser.add_argument('--provider', '-p', choices=list(ClientFactory.PROVIDERS.keys()),
                         help='AI provider (default: interactive)')
     parser.add_argument('--model', '-m', help='Model ID (default: interactive selection)')
     parser.add_argument('--api-key', '-k', help='API key (default: from environment)')
     parser.add_argument('--env', '-e', default='.env', help='Path to .env file (default: .env)')
-    parser.add_argument('--output', '-o', help='Output JSONL file path (default: auto-generated)')
+    parser.add_argument('--output', '-o', help='Output file path (default: auto-generated)')
     parser.add_argument('--resume', action='store_true', help='Resume processing from last completed page')
     parser.add_argument('--to-text', action='store_true', help='Convert JSONL to formatted text')
     parser.add_argument('--output-text', default='drawing_complete.txt',
@@ -188,16 +217,181 @@ Examples:
     parser.add_argument('--to-toon', action='store_true', help='Convert output to Toon format')
     parser.add_argument('--output-toon', help='Output Toon file path (default: auto-generated)')
 
+    # IFC/DWG specific options
+    parser.add_argument('--to-json', action='store_true',
+                        help='Convert IFC/DWG to JSON format (for LLM analysis)')
+    parser.add_argument('--output-json', help='Output JSON file path')
+    parser.add_argument('--analyze', action='store_true',
+                        help='Analyze IFC/DWG and output LLM-friendly summary')
+    parser.add_argument('--detect-clashes', action='store_true', default=True,
+                        help='Detect geometric clashes in IFC files (default: True)')
+    parser.add_argument('--no-clashes', action='store_true',
+                        help='Disable clash detection for faster processing')
+    parser.add_argument('--detect-issues', action='store_true', default=True,
+                        help='Detect modeling issues (default: True)')
+    parser.add_argument('--no-issues', action='store_true',
+                        help='Disable issue detection')
+    parser.add_argument('--include-geometry', action='store_true', default=True,
+                        help='Include geometry/bounding boxes in IFC output (default: True)')
+    parser.add_argument('--no-geometry', action='store_true',
+                        help='Exclude geometry for faster processing')
+    parser.add_argument('--include-entities', action='store_true', default=True,
+                        help='Include all entities in CAD output (default: True)')
+    parser.add_argument('--no-entities', action='store_true',
+                        help='Exclude entities for smaller output')
+    parser.add_argument('--oda-converter', help='Path to ODA File Converter for DWG support')
+
     args = parser.parse_args()
 
     try:
+        # Determine file type
+        file_type = get_file_type(args.input)
+
+        # Handle negation flags
+        detect_clashes = not args.no_clashes
+        detect_issues = not args.no_issues
+        include_geometry = not args.no_geometry
+        include_entities = not args.no_entities
+
+        # IFC File Processing
+        if file_type == 'ifc':
+            logger.info(f"Processing IFC file: {args.input}")
+            ifc_converter = IFCConverter()
+
+            if not ifc_converter.is_available():
+                logger.error("IFC processing requires ifcopenshell. Install with: pip install ifcopenshell")
+                sys.exit(1)
+
+            if args.analyze:
+                # LLM-focused analysis output
+                result = ifc_converter.analyze_for_llm(args.input, include_elements=include_entities)
+                output_path = args.output_json or args.input.replace('.ifc', '_analysis.json')
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump(result, f, indent=2, default=str)
+                logger.info(f"Analysis complete! Output: {output_path}")
+
+                # Print summary
+                print(f"\n{'='*60}")
+                print("IFC ANALYSIS SUMMARY")
+                print(f"{'='*60}")
+                print(f"Project: {result['project_summary']['name']}")
+                print(f"Elements: {result['project_summary']['total_elements']}")
+                print(f"Clashes: {result['clash_analysis']['total_clashes']}")
+                print(f"  - Critical: {result['clash_analysis']['by_severity'].get('critical', 0)}")
+                print(f"  - Major: {result['clash_analysis']['by_severity'].get('major', 0)}")
+                print(f"Issues: {result['issue_analysis']['total_issues']}")
+                print(f"\nRecommendations:")
+                for rec in result['recommendations']:
+                    print(f"  - {rec}")
+                print(f"{'='*60}\n")
+                return
+
+            if args.to_json:
+                output_path = args.output_json or args.input.replace('.ifc', '.json')
+                ifc_converter.convert_to_json(
+                    args.input, output_path,
+                    include_geometry=include_geometry,
+                    detect_clashes=detect_clashes,
+                    detect_issues=detect_issues
+                )
+                return
+
+            if args.to_toon:
+                output_path = args.output_toon or args.input.replace('.ifc', '.toon')
+                ifc_converter.convert_to_toon(
+                    args.input, output_path,
+                    include_geometry=include_geometry,
+                    detect_clashes=detect_clashes,
+                    detect_issues=detect_issues
+                )
+                return
+
+            # Default: convert to JSON
+            output_path = args.output_json or args.output or args.input.replace('.ifc', '.json')
+            ifc_converter.convert_to_json(
+                args.input, output_path,
+                include_geometry=include_geometry,
+                detect_clashes=detect_clashes,
+                detect_issues=detect_issues
+            )
+            return
+
+        # DWG/DXF File Processing
+        if file_type == 'cad':
+            logger.info(f"Processing CAD file: {args.input}")
+            dwg_converter = DWGConverter(oda_converter_path=args.oda_converter)
+
+            if not dwg_converter.is_available():
+                logger.error("CAD processing requires ezdxf. Install with: pip install ezdxf")
+                sys.exit(1)
+
+            if args.analyze:
+                # LLM-focused analysis output
+                result = dwg_converter.analyze_for_llm(args.input, include_entities=include_entities)
+                output_path = args.output_json or args.input.rsplit('.', 1)[0] + '_analysis.json'
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump(result, f, indent=2, default=str)
+                logger.info(f"Analysis complete! Output: {output_path}")
+
+                # Print summary
+                print(f"\n{'='*60}")
+                print("CAD ANALYSIS SUMMARY")
+                print(f"{'='*60}")
+                print(f"File: {result['drawing_summary']['file_name']}")
+                print(f"Format: {result['drawing_summary']['file_format']}")
+                print(f"Entities: {result['drawing_summary']['total_entities']}")
+                print(f"Layers: {result['layer_analysis']['total_layers']}")
+                print(f"Blocks: {result['block_analysis']['total_blocks']}")
+                print(f"Issues: {result['issue_analysis']['total_issues']}")
+                print(f"\nRecommendations:")
+                for rec in result['recommendations']:
+                    print(f"  - {rec}")
+                print(f"{'='*60}\n")
+                return
+
+            if args.to_json:
+                output_path = args.output_json or args.input.rsplit('.', 1)[0] + '.json'
+                dwg_converter.convert_to_json(
+                    args.input, output_path,
+                    include_entities=include_entities,
+                    include_text_content=True,
+                    detect_issues=detect_issues
+                )
+                return
+
+            if args.to_toon:
+                output_path = args.output_toon or args.input.rsplit('.', 1)[0] + '.toon'
+                dwg_converter.convert_to_toon(
+                    args.input, output_path,
+                    include_entities=include_entities,
+                    include_text_content=True,
+                    detect_issues=detect_issues
+                )
+                return
+
+            # Default: convert to JSON
+            output_path = args.output_json or args.output or args.input.rsplit('.', 1)[0] + '.json'
+            dwg_converter.convert_to_json(
+                args.input, output_path,
+                include_entities=include_entities,
+                include_text_content=True,
+                detect_issues=detect_issues
+            )
+            return
+
         # JSONL Conversion Mode
-        if args.pdf.endswith('.json') or args.pdf.endswith('.jsonl'):
-            logger.info(f"Converting JSONL to text: {args.pdf}")
-            converter = DrawingTextConverter(args.pdf)
+        if file_type == 'jsonl':
+            logger.info(f"Converting JSONL to text: {args.input}")
+            converter = DrawingTextConverter(args.input)
             converter.convert(args.output_text)
             logger.info(f"Conversion complete! Output: {args.output_text}")
             return
+
+        # PDF Processing (original functionality)
+        if file_type != 'pdf':
+            logger.error(f"Unsupported file type: {args.input}")
+            logger.error("Supported formats: PDF, IFC, DWG, DXF, JSONL")
+            sys.exit(1)
 
         # Config Setup
         env_vars = load_env_file(args.env)
@@ -233,7 +427,7 @@ Examples:
                         return
 
                 output_file = await process_pdf_async(
-                    args.pdf, client, model, provider,
+                    args.input, client, model, provider,
                     resume=args.resume,
                     output_file=args.output
                 )

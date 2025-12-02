@@ -39,6 +39,22 @@ local = [
     "accelerate>=0.26.0",
 ]
 
+# IFC/BIM file support
+ifc = [
+    "ifcopenshell>=0.7.0",
+]
+
+# CAD file support (DWG/DXF)
+cad = [
+    "ezdxf>=1.0.0",
+]
+
+# Full BIM/CAD support
+bim = [
+    "ifcopenshell>=0.7.0",
+    "ezdxf>=1.0.0",
+]
+
 minimal = []
 
 full = [
@@ -47,6 +63,8 @@ full = [
     "timm==0.9.16",
     "einops==0.8.0",
     "accelerate>=0.26.0",
+    "ifcopenshell>=0.7.0",
+    "ezdxf>=1.0.0",
 ]
 
 dev = [
