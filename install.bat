@@ -6,13 +6,13 @@ REM Uses uv for dependency management
 setlocal enabledelayedexpansion
 
 echo.
-echo 🚀 AI Drawing Analyzer - Installation (Windows)
+echo AI Drawing Analyzer - Installation (Windows)
 echo ======================================================
 echo.
 echo This script will help you set up the PDF Analyzer for:
-echo   ✅ Florence-2 OCR (local, no API key^)
-echo   ✅ Any Hugging Face vision model locally
-echo   ✅ Cloud APIs (Google Gemini, OpenAI, Anthropic, etc.^)
+echo   - Florence-2 OCR (local, no API key^)
+echo   - Any Hugging Face vision model locally
+echo   - Cloud APIs (Google Gemini, OpenAI, Anthropic, etc.^)
 echo.
 
 REM Check Python installation and version
@@ -32,7 +32,7 @@ for %%P in (python python3 py) do (
 )
 
 if "!PYTHON_CMD!"=="" (
-    echo ❌ Python is not installed or not in PATH
+    echo [ERROR] Python is not installed or not in PATH
     goto :install_python_prompt
 )
 
@@ -57,7 +57,7 @@ if !PY_MAJOR! gtr !MIN_MAJOR! (
 
 if "!PYTHON_OK!"=="0" (
     echo.
-    echo ❌ Python version !PYTHON_VERSION! is too old.
+    echo [ERROR] Python version !PYTHON_VERSION! is too old.
     echo    This project requires Python !MIN_MAJOR!.!MIN_MINOR! or higher.
     goto :install_python_prompt
 )
@@ -86,7 +86,7 @@ goto :install_python_prompt
 
 :auto_install_python
 echo.
-echo 📥 Downloading Python installer...
+echo Downloading Python installer...
 echo    This will download Python 3.12 (latest stable^)
 echo.
 
@@ -112,15 +112,15 @@ echo.
 powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '!PYTHON_URL!' -OutFile '!INSTALLER_PATH!' -UseBasicParsing}"
 
 if not exist "!INSTALLER_PATH!" (
-    echo ❌ Failed to download Python installer.
+    echo [ERROR] Failed to download Python installer.
     echo    Please download manually from https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
-echo ✅ Download complete!
+echo [OK] Download complete!
 echo.
-echo 🔧 Installing Python 3.12...
+echo Installing Python 3.12...
 echo    • Adding Python to PATH
 echo    • Installing pip
 echo    • Installing for current user
@@ -132,16 +132,16 @@ REM Run installer with options: add to PATH, install pip, install for user
 "!INSTALLER_PATH!" /passive InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1
 
 if errorlevel 1 (
-    echo ❌ Python installation failed.
+    echo [ERROR] Python installation failed.
     echo    Please try installing manually from https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
 echo.
-echo ✅ Python installed successfully!
+echo [OK] Python installed successfully!
 echo.
-echo ⚠️  IMPORTANT: Please close this window and run install.bat again
+echo IMPORTANT: Please close this window and run install.bat again
 echo    to use the newly installed Python.
 echo.
 del "!INSTALLER_PATH!" 2>nul
@@ -150,7 +150,7 @@ exit /b 0
 
 :open_python_website
 echo.
-echo 🌐 Opening python.org downloads page...
+echo Opening python.org downloads page...
 start https://www.python.org/downloads/
 echo.
 echo After installing Python:
@@ -187,7 +187,7 @@ goto :uv_ok
 
 :install_uv
 echo.
-echo 📦 Installing uv (Python package manager)...
+echo Installing uv (Python package manager)...
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 REM Refresh PATH to find newly installed uv
@@ -195,11 +195,11 @@ set "PATH=%USERPROFILE%\.local\bin;%USERPROFILE%\.cargo\bin;%PATH%"
 
 uv --version >nul 2>&1
 if errorlevel 1 (
-    echo ❌ Failed to install uv. Please install manually from https://astral.sh/uv
+    echo [ERROR] Failed to install uv. Please install manually from https://astral.sh/uv
     pause
     exit /b 1
 )
-echo ✅ uv installed successfully
+echo [OK] uv installed successfully
 echo.
 
 :uv_ok
@@ -207,17 +207,17 @@ echo.
 REM Ask user for installation type
 echo Choose your installation type:
 echo ════════════════════════════════════════════════════════════
-echo 1️⃣  LOCAL MODELS ONLY (Recommended^)
+echo 1)  LOCAL MODELS ONLY (Recommended^)
 echo    • Run Florence-2, Qwen-VL, Qwen3-VL, LLaVA locally
 echo    • No API key required
 echo    • Best for: Technical drawings, blueprints
 echo.
-echo 2️⃣  CLOUD APIs ONLY (Minimal^)
+echo 2)  CLOUD APIs ONLY (Minimal^)
 echo    • Use Gemini, OpenAI, Claude, etc.
 echo    • Requires API keys
 echo    • Best for: Quick testing, occasional use
 echo.
-echo 3️⃣  BOTH LOCAL and CLOUD (Full Setup^)
+echo 3)  BOTH LOCAL and CLOUD (Full Setup^)
 echo    • All features: local models + cloud APIs
 echo    • Choose which to use at runtime
 echo ════════════════════════════════════════════════════════════
@@ -226,16 +226,16 @@ if "!choice!"=="" set choice=1
 
 REM Install dependencies based on choice using uv
 echo.
-echo 📥 Installing dependencies with uv...
+echo Installing dependencies with uv...
 echo    (This may take 2-5 minutes depending on your internet^)
 echo.
 
 if "!choice!"=="1" (
-    echo 📚 Installing LOCAL MODEL SUPPORT...
+    echo Installing LOCAL MODEL SUPPORT...
     echo    • transformers, torch, timm, einops
     uv sync --extra local
     echo.
-    echo 🚀 GPU ACCELERATION (Optional but Recommended^)
+    echo GPU ACCELERATION (Optional but Recommended^)
     echo    To use GPU (CUDA 11.8^) for 10-100x faster inference:
     echo.
     echo    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
@@ -243,30 +243,30 @@ if "!choice!"=="1" (
     echo    For other CUDA versions, visit: https://pytorch.org/get-started/locally/
     echo.
 ) else if "!choice!"=="2" (
-    echo ☁️  Installing CLOUD API SUPPORT...
+    echo Installing CLOUD API SUPPORT...
     echo    • httpx, pymupdf, Pillow, google-auth, etc.
     uv sync
     echo.
 ) else if "!choice!"=="3" (
-    echo 🔗 Installing FULL SETUP (Local + Cloud^)...
+    echo Installing FULL SETUP (Local + Cloud^)...
     echo    • All local model dependencies
     echo    • All cloud API dependencies
     uv sync --all-extras
     echo.
-    echo 🚀 GPU ACCELERATION (Optional but Recommended^)
+    echo GPU ACCELERATION (Optional but Recommended^)
     echo    To use GPU (CUDA 11.8^) for faster inference:
     echo.
     echo    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
     echo.
 ) else (
-    echo ❓ Invalid choice. Using LOCAL MODELS (option 1^) by default...
+    echo Invalid choice. Using LOCAL MODELS (option 1^) by default...
     uv sync --extra local
 )
 
 REM Create .env from example if it doesn't exist
 if not exist .env (
     echo.
-    echo 📝 Creating .env file from template...
+    echo Creating .env file from template...
     if exist .env.example (
         copy .env.example .env
         if "!choice!"=="1" (
@@ -279,42 +279,42 @@ if not exist .env (
 
 echo.
 echo ======================================================
-echo ✅ Installation Complete!
+echo Installation Complete!
 echo ======================================================
 echo.
-echo 🎯 NEXT STEPS:
+echo NEXT STEPS:
 echo.
 
 if "!choice!"=="1" (
-    echo 1️⃣  Activate environment:
+    echo 1)  Activate environment:
     echo    .venv\Scripts\activate.bat
     echo.
-    echo 2️⃣  Test with Florence-2 (interactive^):
+    echo 2)  Test with Florence-2 (interactive^):
     echo    ai-drawing-analyzer your_document.pdf
     echo.
-    echo 3️⃣  Or use command-line directly:
+    echo 3)  Or use command-line directly:
     echo    ai-drawing-analyzer doc.pdf -p huggingface-local -m microsoft/Florence-2-large
     echo.
-    echo 📊 First run will download the model (~2-24GB, takes 5-10 minutes^)
+    echo First run will download the model (~2-24GB, takes 5-10 minutes^)
     echo    Model is cached afterwards for fast reuse
 ) else if "!choice!"=="2" (
-    echo 1️⃣  Activate environment:
+    echo 1)  Activate environment:
     echo    .venv\Scripts\activate.bat
     echo.
-    echo 2️⃣  Add API keys to .env file:
+    echo 2)  Add API keys to .env file:
     echo    notepad .env
     echo.
-    echo 3️⃣  Test with Gemini (free tier^):
+    echo 3)  Test with Gemini (free tier^):
     echo    ai-drawing-analyzer your_document.pdf -p gemini
     echo.
-    echo 🆓 Get free API keys:
+    echo Get free API keys:
     echo    • Google Gemini: https://makersuite.google.com/app/apikey
     echo    • HuggingFace Router: https://huggingface.co/settings/tokens
 ) else (
-    echo 1️⃣  Activate environment:
+    echo 1)  Activate environment:
     echo    .venv\Scripts\activate.bat
     echo.
-    echo 2️⃣  Choose your path:
+    echo 2)  Choose your path:
     echo.
     echo    LOCAL (no API key^):
     echo    ai-drawing-analyzer doc.pdf -p huggingface-local
@@ -326,7 +326,7 @@ if "!choice!"=="1" (
 )
 
 echo.
-echo 📖 Documentation:
+echo Documentation:
 echo    • Quick Start: QUICK_START.md
 echo    • Full Guide: README.md
 echo    • Help: ai-drawing-analyzer --help
