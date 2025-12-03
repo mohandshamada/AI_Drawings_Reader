@@ -173,23 +173,36 @@ exit /b 1
 :python_ok
 
 REM Check and install uv if needed
+echo Checking uv installation...
+uv --version >nul 2>&1
+if errorlevel 1 goto :install_uv
+
+REM uv is installed - get version safely (avoid parentheses issues)
+for /f "tokens=1,2" %%a in ('uv --version 2^>nul') do (
+    set "UV_VERSION=%%a %%b"
+)
+echo [OK] Found uv: !UV_VERSION!
+echo.
+goto :uv_ok
+
+:install_uv
+echo.
+echo 📦 Installing uv (Python package manager)...
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+REM Refresh PATH to find newly installed uv
+set "PATH=%USERPROFILE%\.local\bin;%USERPROFILE%\.cargo\bin;%PATH%"
+
 uv --version >nul 2>&1
 if errorlevel 1 (
-    echo.
-    echo 📦 Installing uv (Python package manager)...
-    powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-    uv --version >nul 2>&1
-    if errorlevel 1 (
-        echo ❌ Failed to install uv. Please install manually from https://astral.sh/uv
-        pause
-        exit /b 1
-    )
-    echo ✅ uv installed successfully
-) else (
-    for /f "tokens=*" %%i in ('uv --version') do set UV_VERSION=%%i
-    echo [OK] Found uv: !UV_VERSION!
+    echo ❌ Failed to install uv. Please install manually from https://astral.sh/uv
+    pause
+    exit /b 1
 )
+echo ✅ uv installed successfully
 echo.
+
+:uv_ok
 
 REM Ask user for installation type
 echo Choose your installation type:
