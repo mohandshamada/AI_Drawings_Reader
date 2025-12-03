@@ -15,18 +15,162 @@ echo   ✅ Any Hugging Face vision model locally
 echo   ✅ Cloud APIs (Google Gemini, OpenAI, Anthropic, etc.^)
 echo.
 
-REM Check Python installation
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo ❌ Python 3 is not installed or not in PATH
-    echo Please install Python 3.8 or higher from python.org
+REM Check Python installation and version
+set "PYTHON_CMD="
+set "PYTHON_OK=0"
+set "MIN_MAJOR=3"
+set "MIN_MINOR=9"
+
+REM Try different Python commands (python, python3, py)
+for %%P in (python python3 py) do (
+    if "!PYTHON_CMD!"=="" (
+        %%P --version >nul 2>&1
+        if !errorlevel! equ 0 (
+            set "PYTHON_CMD=%%P"
+        )
+    )
+)
+
+if "!PYTHON_CMD!"=="" (
+    echo ❌ Python is not installed or not in PATH
+    goto :install_python_prompt
+)
+
+REM Get Python version and parse it
+for /f "tokens=2 delims= " %%V in ('!PYTHON_CMD! --version 2^>^&1') do set "PYTHON_VERSION=%%V"
+echo    Detected Python version: !PYTHON_VERSION!
+
+REM Parse major and minor version numbers
+for /f "tokens=1,2 delims=." %%A in ("!PYTHON_VERSION!") do (
+    set "PY_MAJOR=%%A"
+    set "PY_MINOR=%%B"
+)
+
+REM Check if version is >= 3.9
+if !PY_MAJOR! gtr !MIN_MAJOR! (
+    set "PYTHON_OK=1"
+) else if !PY_MAJOR! equ !MIN_MAJOR! (
+    if !PY_MINOR! geq !MIN_MINOR! (
+        set "PYTHON_OK=1"
+    )
+)
+
+if "!PYTHON_OK!"=="0" (
+    echo.
+    echo ❌ Python version !PYTHON_VERSION! is too old.
+    echo    This project requires Python !MIN_MAJOR!.!MIN_MINOR! or higher.
+    goto :install_python_prompt
+)
+
+echo [OK] Python !PYTHON_VERSION! found (using !PYTHON_CMD!^)
+echo.
+goto :python_ok
+
+:install_python_prompt
+echo.
+echo ════════════════════════════════════════════════════════════
+echo Python !MIN_MAJOR!.!MIN_MINOR! or higher is required but not found.
+echo ════════════════════════════════════════════════════════════
+echo.
+echo Choose an option:
+echo   1^) Download and install Python automatically (recommended^)
+echo   2^) Open python.org in browser to download manually
+echo   3^) Exit and install Python yourself
+echo.
+set /p INSTALL_CHOICE="Enter choice (1-3): "
+
+if "!INSTALL_CHOICE!"=="1" goto :auto_install_python
+if "!INSTALL_CHOICE!"=="2" goto :open_python_website
+if "!INSTALL_CHOICE!"=="3" goto :exit_no_python
+goto :install_python_prompt
+
+:auto_install_python
+echo.
+echo 📥 Downloading Python installer...
+echo    This will download Python 3.12 (latest stable^)
+echo.
+
+REM Create temp directory for download
+set "TEMP_DIR=%TEMP%\python_install"
+if not exist "!TEMP_DIR!" mkdir "!TEMP_DIR!"
+
+REM Detect system architecture
+set "ARCH=amd64"
+if "%PROCESSOR_ARCHITECTURE%"=="x86" (
+    if not defined PROCESSOR_ARCHITEW6432 (
+        set "ARCH=win32"
+    )
+)
+
+REM Download Python installer using PowerShell
+set "PYTHON_URL=https://www.python.org/ftp/python/3.12.7/python-3.12.7-!ARCH!.exe"
+set "INSTALLER_PATH=!TEMP_DIR!\python-installer.exe"
+
+echo    Downloading from: !PYTHON_URL!
+echo.
+
+powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '!PYTHON_URL!' -OutFile '!INSTALLER_PATH!' -UseBasicParsing}"
+
+if not exist "!INSTALLER_PATH!" (
+    echo ❌ Failed to download Python installer.
+    echo    Please download manually from https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
-echo [OK] Python found:
-python --version
+echo ✅ Download complete!
 echo.
+echo 🔧 Installing Python 3.12...
+echo    • Adding Python to PATH
+echo    • Installing pip
+echo    • Installing for current user
+echo.
+echo    Please wait... (this may take 1-2 minutes^)
+echo.
+
+REM Run installer with options: add to PATH, install pip, install for user
+"!INSTALLER_PATH!" /passive InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1
+
+if errorlevel 1 (
+    echo ❌ Python installation failed.
+    echo    Please try installing manually from https://www.python.org/downloads/
+    pause
+    exit /b 1
+)
+
+echo.
+echo ✅ Python installed successfully!
+echo.
+echo ⚠️  IMPORTANT: Please close this window and run install.bat again
+echo    to use the newly installed Python.
+echo.
+del "!INSTALLER_PATH!" 2>nul
+pause
+exit /b 0
+
+:open_python_website
+echo.
+echo 🌐 Opening python.org downloads page...
+start https://www.python.org/downloads/
+echo.
+echo After installing Python:
+echo   1. Make sure to check "Add Python to PATH" during installation
+echo   2. Close and reopen this terminal
+echo   3. Run install.bat again
+echo.
+pause
+exit /b 0
+
+:exit_no_python
+echo.
+echo Installation cancelled. Please install Python !MIN_MAJOR!.!MIN_MINOR!+ from:
+echo   https://www.python.org/downloads/
+echo.
+echo Make sure to check "Add Python to PATH" during installation.
+pause
+exit /b 1
+
+:python_ok
 
 REM Check and install uv if needed
 uv --version >nul 2>&1
