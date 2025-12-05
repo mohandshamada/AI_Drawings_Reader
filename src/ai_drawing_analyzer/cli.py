@@ -68,6 +68,11 @@ async def process_pdf_async(pdf_path: str, client, model: str, provider: str, re
 
     config = AppConfig.from_env()
 
+    # Log auto-detected settings
+    if config.get('_auto_adjusted'):
+        logger.info(f"Auto-detected resources: {AppConfig.get_resource_info()}")
+    logger.info(f"PDF settings: zoom={config['pdf_zoom_level']}, quality={config['jpeg_quality']}")
+
     with PDFProcessor(local_path, zoom=config['pdf_zoom_level'], quality=config['jpeg_quality']) as processor:
         page_count = processor.get_page_count()
         logger.info(f"Total pages: {page_count}")
