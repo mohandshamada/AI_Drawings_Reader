@@ -767,17 +767,47 @@ def create_interface() -> gr.Blocks:
 
 def main():
     """Launch the Gradio interface"""
+    import inspect
+
     # Load environment variables
     load_env_file()
 
-    # Create and launch interface
+    # Get port from environment or use default
+    default_port = int(os.getenv('GRADIO_SERVER_PORT', '7860'))
+
+    # Create interface
     demo = create_interface()
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        share=False,  # Set to True to get a public URL
-        show_error=True
-    )
+
+    # Build launch kwargs based on what the Gradio version supports
+    launch_kwargs = {}
+
+    # Check launch() signature for supported parameters
+    try:
+        sig = inspect.signature(demo.launch)
+        params = sig.parameters
+
+        if 'server_name' in params:
+            launch_kwargs['server_name'] = "0.0.0.0"
+        if 'server_port' in params:
+            launch_kwargs['server_port'] = default_port
+        if 'share' in params:
+            launch_kwargs['share'] = False
+        if 'show_error' in params:
+            launch_kwargs['show_error'] = True
+
+        print(f"Gradio version: {GRADIO_VERSION}")
+        print(f"Starting server on port {default_port}...")
+        demo.launch(**launch_kwargs)
+
+    except Exception as e:
+        # Fallback: try minimal launch
+        print(f"Error with configured launch: {e}")
+        print("Trying minimal launch...")
+        try:
+            demo.launch()
+        except Exception as e2:
+            print(f"ERROR: Could not start server: {e2}")
+            print("Try: pip install 'gradio>=4.0.0'")
 
 
 if __name__ == "__main__":
