@@ -15,6 +15,14 @@ from typing import Optional, List, Tuple
 
 import gradio as gr
 
+# Check Gradio version for feature compatibility
+GRADIO_VERSION = getattr(gr, '__version__', '0.0.0')
+try:
+    _major, _minor = map(int, GRADIO_VERSION.split('.')[:2])
+    GRADIO_SUPPORTS_THEME = _major >= 4 or (_major == 3 and _minor >= 40)
+except (ValueError, AttributeError):
+    GRADIO_SUPPORTS_THEME = False
+
 from .clients.factory import ClientFactory
 from .processing.pdf import PDFProcessor
 from .converters.jsonl_to_text import DrawingTextConverter
@@ -432,14 +440,23 @@ def create_interface() -> gr.Blocks:
     saved_config = load_saved_config()
     saved_keys = saved_config.get('api_keys', {})
 
-    with gr.Blocks(
-        title="AI Drawing Analyzer",
-        theme=gr.themes.Soft(),
-        css="""
+    # Build Blocks kwargs - theme support varies by Gradio version
+    blocks_kwargs = {
+        "title": "AI Drawing Analyzer",
+        "css": """
         .main-header { text-align: center; margin-bottom: 20px; }
         .status-box { padding: 10px; border-radius: 5px; }
         """
-    ) as demo:
+    }
+
+    # Try to add theme (Gradio 3.40+ / 4.0+)
+    if GRADIO_SUPPORTS_THEME:
+        try:
+            blocks_kwargs["theme"] = gr.themes.Soft()
+        except Exception:
+            pass  # Skip theme if it fails
+
+    with gr.Blocks(**blocks_kwargs) as demo:
 
         gr.Markdown(
             """
