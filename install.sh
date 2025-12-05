@@ -6,8 +6,8 @@
 
 set -e  # Exit on error
 
-echo "🚀 AI Drawing Analyzer - Installation Script"
-echo "=============================================="
+echo "AI Drawing Analyzer - Installation Script"
+echo "=========================================="
 echo ""
 
 # Check Python version
@@ -25,12 +25,12 @@ echo "[OK] Python $PYTHON_VERSION detected"
 echo ""
 
 # Installation options
-echo "📋 Installation Options:"
+echo "Installation Options:"
 echo ""
 echo "1. Minimal - Core dependencies only (cloud APIs)"
-echo "2. Local  - With local model support (requires ~10GB disk space)"
-echo "3. Full   - Everything including development tools"
-echo "4. Dev    - Development only (testing, linting, formatting)"
+echo "2. Local   - With local model support (requires ~10GB disk space)"
+echo "3. Full    - Everything including development tools"
+echo "4. Dev     - Development only (testing, linting, formatting)"
 echo ""
 read -p "Select installation type (1-4): " INSTALL_TYPE
 echo ""
@@ -58,55 +58,63 @@ case $INSTALL_TYPE in
         ;;
 esac
 
-echo "📦 Installing: $INSTALL_NAME"
+echo "Installing: $INSTALL_NAME"
 echo ""
 
 # Create virtual environment
 if [ ! -d "venv" ]; then
-    echo "🔧 Creating virtual environment..."
-    python3 -m venv venv
-    echo "✅ Virtual environment created"
+    echo "Creating virtual environment..."
+    # Try standard venv first, fall back to --without-pip if ensurepip fails
+    if ! python3 -m venv venv 2>/dev/null; then
+        echo "   Standard venv failed, trying without pip..."
+        python3 -m venv venv --without-pip
+        # Manually install pip
+        echo "   Installing pip manually..."
+        source venv/bin/activate
+        curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+    fi
+    echo "[OK] Virtual environment created"
 else
-    echo "✅ Virtual environment already exists"
+    echo "[OK] Virtual environment already exists"
 fi
 echo ""
 
 # Activate virtual environment
-echo "🔧 Activating virtual environment..."
+echo "Activating virtual environment..."
 source venv/bin/activate
 echo ""
 
 # Upgrade pip
-echo "📦 Upgrading pip..."
+echo "Upgrading pip..."
 pip install --upgrade pip > /dev/null 2>&1
-echo "✅ pip upgraded"
+echo "[OK] pip upgraded"
 echo ""
 
 # Install Python dependencies
-echo "📦 Installing Python dependencies..."
+echo "Installing Python dependencies..."
 if [ -n "$INSTALL_EXTRAS" ]; then
     pip install -e "$INSTALL_EXTRAS"
 else
     pip install -e .
 fi
-echo "✅ Python dependencies installed"
+echo "[OK] Python dependencies installed"
 echo ""
 
 # Install Node.js dependencies for Toon format
-read -p "📦 Install Node.js dependencies for Toon format export? (y/n): " INSTALL_NODE
+read -p "Install Node.js dependencies for Toon format export? (y/n): " INSTALL_NODE
 
 if [[ "$INSTALL_NODE" =~ ^[Yy]$ ]]; then
     if command -v npm &> /dev/null; then
-        echo "🔧 Installing Node.js dependencies..."
+        echo "Installing Node.js dependencies..."
         npm install
-        echo "✅ Node.js dependencies installed"
+        echo "[OK] Node.js dependencies installed"
     elif command -v pnpm &> /dev/null; then
-        echo "🔧 Installing Node.js dependencies with pnpm..."
+        echo "Installing Node.js dependencies with pnpm..."
         pnpm install
-        echo "✅ Node.js dependencies installed"
+        echo "[OK] Node.js dependencies installed"
     else
-        echo "⚠️  Node.js/npm not found. Skipping Toon format support."
-        echo "   Install Node.js from: https://nodejs.org/"
+        echo "[WARN] Node.js/npm not found. Skipping Toon format support."
+        echo "       Install Node.js from: https://nodejs.org/"
     fi
     echo ""
 fi
@@ -114,39 +122,39 @@ fi
 # GPU Setup for local models
 if [[ "$INSTALL_TYPE" == "2" ]] || [[ "$INSTALL_TYPE" == "3" ]]; then
     echo ""
-    read -p "🎮 Do you have an NVIDIA GPU and want GPU acceleration? (y/n): " INSTALL_GPU
+    read -p "Do you have an NVIDIA GPU and want GPU acceleration? (y/n): " INSTALL_GPU
 
     if [[ "$INSTALL_GPU" =~ ^[Yy]$ ]]; then
-        echo "🔧 Installing PyTorch with CUDA support..."
-        echo "   This will download ~2GB of data..."
+        echo "Installing PyTorch with CUDA support..."
+        echo "This will download ~2GB of data..."
         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-        echo "✅ GPU support installed"
+        echo "[OK] GPU support installed"
     fi
     echo ""
 fi
 
 # Verify installation
-echo "🔍 Verifying installation..."
+echo "Verifying installation..."
 echo ""
 
 # Check if command is available
 if command -v ai-drawing-analyzer &> /dev/null; then
-    echo "✅ ai-drawing-analyzer command installed successfully"
+    echo "[OK] ai-drawing-analyzer command installed successfully"
 else
-    echo "❌ Installation failed: ai-drawing-analyzer command not found"
+    echo "[ERROR] Installation failed: ai-drawing-analyzer command not found"
     exit 1
 fi
 
 # Test import
-python3 -c "import ai_drawing_analyzer; print('✅ Python package imports successfully')" || {
-    echo "❌ Installation failed: Cannot import package"
+python3 -c "import ai_drawing_analyzer; print('[OK] Python package imports successfully')" || {
+    echo "[ERROR] Installation failed: Cannot import package"
     exit 1
 }
 
 echo ""
-echo "✨ Installation Complete!"
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "============================================"
+echo "  Installation Complete!"
+echo "============================================"
 echo ""
 echo "Next Steps:"
 echo ""
@@ -163,11 +171,11 @@ echo ""
 echo "4. For help:"
 echo "   ai-drawing-analyzer --help"
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "============================================"
 echo ""
 
 # Save activation hint
 echo ""
-echo "💡 Tip: To use the tool in future sessions, run:"
-echo "   source venv/bin/activate"
+echo "Tip: To use the tool in future sessions, run:"
+echo "     source venv/bin/activate"
 echo ""
