@@ -28,9 +28,16 @@ try:
         AutoModelForVision2Seq,
         Qwen2VLForConditionalGeneration,
     )
+    # Try to import newer model classes for Qwen3-VL, etc.
+    try:
+        from transformers import AutoModelForImageTextToText
+        HAS_IMAGE_TEXT_TO_TEXT = True
+    except ImportError:
+        HAS_IMAGE_TEXT_TO_TEXT = False
     LOCAL_DEPS_AVAILABLE = True
 except ImportError:
     LOCAL_DEPS_AVAILABLE = False
+    HAS_IMAGE_TEXT_TO_TEXT = False
 
 
 class HuggingFaceRouterClient(BaseClient):
@@ -126,18 +133,31 @@ class HuggingFaceLocalClient(BaseClient):
                 self.processor = AutoProcessor.from_pretrained(self.model_id)
 
             # Determine correct model class based on model type
-            if 'qwen2-vl' in model_lower or 'qwen2_vl' in model_lower:
-                # Qwen2-VL models require specific class
+            if 'qwen2-vl' in model_lower or 'qwen2_vl' in model_lower or 'qwen2.5-vl' in model_lower:
+                # Qwen2-VL and Qwen2.5-VL models require specific class
                 ModelClass = Qwen2VLForConditionalGeneration
                 logger.info("   Using Qwen2VLForConditionalGeneration")
+            elif 'qwen3-vl' in model_lower or 'qwen3_vl' in model_lower:
+                # Qwen3-VL models - use AutoModelForImageTextToText or fallback
+                if HAS_IMAGE_TEXT_TO_TEXT:
+                    ModelClass = AutoModelForImageTextToText
+                    logger.info("   Using AutoModelForImageTextToText (Qwen3-VL)")
+                else:
+                    # Fallback: try AutoModelForVision2Seq
+                    ModelClass = AutoModelForVision2Seq
+                    logger.info("   Using AutoModelForVision2Seq (Qwen3-VL fallback)")
             elif 'florence' in model_lower:
                 # Florence models use AutoModelForCausalLM
                 ModelClass = AutoModelForCausalLM
                 logger.info("   Using AutoModelForCausalLM")
-            elif 'llava' in model_lower or 'vision' in model_lower:
-                # LLaVA and other vision models
+            elif 'llava' in model_lower:
+                # LLaVA models
                 ModelClass = AutoModelForVision2Seq
                 logger.info("   Using AutoModelForVision2Seq")
+            elif HAS_IMAGE_TEXT_TO_TEXT and ('vl' in model_lower or 'vision' in model_lower):
+                # Generic vision-language models - try AutoModelForImageTextToText first
+                ModelClass = AutoModelForImageTextToText
+                logger.info("   Using AutoModelForImageTextToText (generic VL)")
             else:
                 # Default to CausalLM for other models
                 ModelClass = AutoModelForCausalLM
@@ -240,8 +260,8 @@ class HuggingFaceLocalClient(BaseClient):
                 else:
                     return str(parsed_answer)
 
-            elif 'qwen2-vl' in model_id or 'qwen2_vl' in model_id:
-                # Qwen2-VL models use chat format
+            elif 'qwen2-vl' in model_id or 'qwen2_vl' in model_id or 'qwen2.5-vl' in model_id:
+                # Qwen2-VL and Qwen2.5-VL models use chat format
                 messages = [
                     {
                         "role": "user",
@@ -266,6 +286,49 @@ class HuggingFaceLocalClient(BaseClient):
                 generated_ids_trimmed = [
                     out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
                 ]
+
+                output_text = self.processor.batch_decode(
+                    generated_ids_trimmed,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False
+                )
+                return output_text[0]
+
+            elif 'qwen3-vl' in model_id or 'qwen3_vl' in model_id:
+                # Qwen3-VL models use chat format similar to Qwen2-VL
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image", "image": image},
+                            {"type": "text", "text": prompt}
+                        ]
+                    }
+                ]
+
+                text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                inputs = self.processor(text=[text], images=[image], return_tensors="pt")
+
+                # Move inputs to device (handle device_map='auto' case)
+                if hasattr(self.model, 'device'):
+                    inputs = {k: v.to(self.model.device) if hasattr(v, 'to') else v for k, v in inputs.items()}
+                else:
+                    inputs = {k: v.to(self.device) if hasattr(v, 'to') else v for k, v in inputs.items()}
+
+                with torch.no_grad():
+                    generated_ids = self.model.generate(
+                        **inputs,
+                        max_new_tokens=1024,
+                        do_sample=False
+                    )
+
+                # Trim input tokens from output
+                if 'input_ids' in inputs:
+                    generated_ids_trimmed = [
+                        out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs['input_ids'], generated_ids)
+                    ]
+                else:
+                    generated_ids_trimmed = generated_ids
 
                 output_text = self.processor.batch_decode(
                     generated_ids_trimmed,
