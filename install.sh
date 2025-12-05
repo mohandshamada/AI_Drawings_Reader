@@ -62,18 +62,43 @@ echo "Installing: $INSTALL_NAME"
 echo ""
 
 # Create virtual environment
-if [ ! -d "venv" ]; then
+if [ ! -d "venv" ] || [ ! -f "venv/bin/activate" ]; then
+    # Remove broken venv if exists
+    rm -rf venv 2>/dev/null || true
+
     echo "Creating virtual environment..."
-    # Try standard venv first, fall back to --without-pip if ensurepip fails
-    if ! python3 -m venv venv 2>/dev/null; then
+
+    # Try standard venv first
+    if python3 -m venv venv 2>&1; then
+        echo "[OK] Virtual environment created"
+    else
         echo "   Standard venv failed, trying without pip..."
-        python3 -m venv venv --without-pip
-        # Manually install pip
-        echo "   Installing pip manually..."
-        source venv/bin/activate
-        curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+        # Try without pip (for systems missing ensurepip)
+        if python3 -m venv venv --without-pip 2>&1; then
+            echo "[OK] Virtual environment created (without pip)"
+            # Activate and manually install pip
+            echo "   Installing pip manually..."
+            . venv/bin/activate
+            if command -v curl &> /dev/null; then
+                curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+                python3 /tmp/get-pip.py
+                rm -f /tmp/get-pip.py
+            elif command -v wget &> /dev/null; then
+                wget -q https://bootstrap.pypa.io/get-pip.py -O /tmp/get-pip.py
+                python3 /tmp/get-pip.py
+                rm -f /tmp/get-pip.py
+            else
+                echo "[ERROR] Cannot install pip: curl or wget required"
+                exit 1
+            fi
+            echo "[OK] pip installed manually"
+        else
+            echo "[ERROR] Failed to create virtual environment"
+            echo "   Try: apt install python3-venv  (Debian/Ubuntu)"
+            echo "   Or:  dnf install python3-venv  (Fedora)"
+            exit 1
+        fi
     fi
-    echo "[OK] Virtual environment created"
 else
     echo "[OK] Virtual environment already exists"
 fi
@@ -81,12 +106,17 @@ echo ""
 
 # Activate virtual environment
 echo "Activating virtual environment..."
-source venv/bin/activate
+if [ -f "venv/bin/activate" ]; then
+    . venv/bin/activate
+else
+    echo "[ERROR] Virtual environment activation script not found"
+    exit 1
+fi
 echo ""
 
 # Upgrade pip
 echo "Upgrading pip..."
-pip install --upgrade pip > /dev/null 2>&1
+pip install --upgrade pip --quiet 2>/dev/null || pip install --upgrade pip
 echo "[OK] pip upgraded"
 echo ""
 
