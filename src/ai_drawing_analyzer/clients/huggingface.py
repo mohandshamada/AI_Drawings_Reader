@@ -2,11 +2,22 @@ from typing import List, Dict, Optional
 import httpx
 import base64
 import io
+import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 from .base import BaseClient
 from ..utils.logging import logger
+
+# Fix hf_transfer issue: disable if package not available
+# This prevents "hf_transfer package is not available" errors
+if os.environ.get("HF_HUB_ENABLE_HF_TRANSFER") == "1":
+    try:
+        import hf_transfer  # noqa: F401
+    except ImportError:
+        # Disable hf_transfer if not installed to prevent download errors
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+        logger.debug("Disabled HF_HUB_ENABLE_HF_TRANSFER (hf_transfer not installed)")
 
 # Check for local deps
 try:
