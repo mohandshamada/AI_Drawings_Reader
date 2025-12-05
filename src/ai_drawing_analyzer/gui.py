@@ -18,10 +18,23 @@ import gradio as gr
 # Check Gradio version for feature compatibility
 GRADIO_VERSION = getattr(gr, '__version__', '0.0.0')
 try:
-    _major, _minor = map(int, GRADIO_VERSION.split('.')[:2])
+    _version_parts = GRADIO_VERSION.split('.')
+    _major = int(_version_parts[0])
+    _minor = int(_version_parts[1]) if len(_version_parts) > 1 else 0
     GRADIO_SUPPORTS_THEME = _major >= 4 or (_major == 3 and _minor >= 40)
-except (ValueError, AttributeError):
+    # Minimum supported: Gradio 3.20 or any 4.x+
+    GRADIO_MIN_VERSION_OK = _major >= 4 or (_major == 3 and _minor >= 20)
+except (ValueError, AttributeError, IndexError):
     GRADIO_SUPPORTS_THEME = False
+    GRADIO_MIN_VERSION_OK = False
+
+# Warn if Gradio version is too old
+if not GRADIO_MIN_VERSION_OK:
+    import warnings
+    warnings.warn(
+        f"Gradio version {GRADIO_VERSION} may be too old. "
+        f"The GUI requires Gradio >= 3.20. Please upgrade: pip install 'gradio>=4.0.0'"
+    )
 
 from .clients.factory import ClientFactory
 from .processing.pdf import PDFProcessor
@@ -440,19 +453,38 @@ def create_interface() -> gr.Blocks:
     saved_config = load_saved_config()
     saved_keys = saved_config.get('api_keys', {})
 
-    # Build Blocks kwargs - theme support varies by Gradio version
-    blocks_kwargs = {
-        "title": "AI Drawing Analyzer",
-        "css": """
-        .main-header { text-align: center; margin-bottom: 20px; }
-        .status-box { padding: 10px; border-radius: 5px; }
-        """
-    }
+    # Build Blocks kwargs - feature support varies by Gradio version
+    blocks_kwargs = {}
+
+    # Try adding title (most versions support this)
+    try:
+        # Test if title is supported by checking signature
+        import inspect
+        sig = inspect.signature(gr.Blocks.__init__)
+        if 'title' in sig.parameters:
+            blocks_kwargs["title"] = "AI Drawing Analyzer"
+    except Exception:
+        pass
+
+    # Try adding css (Gradio 3.x+)
+    try:
+        import inspect
+        sig = inspect.signature(gr.Blocks.__init__)
+        if 'css' in sig.parameters:
+            blocks_kwargs["css"] = """
+            .main-header { text-align: center; margin-bottom: 20px; }
+            .status-box { padding: 10px; border-radius: 5px; }
+            """
+    except Exception:
+        pass
 
     # Try to add theme (Gradio 3.40+ / 4.0+)
     if GRADIO_SUPPORTS_THEME:
         try:
-            blocks_kwargs["theme"] = gr.themes.Soft()
+            import inspect
+            sig = inspect.signature(gr.Blocks.__init__)
+            if 'theme' in sig.parameters:
+                blocks_kwargs["theme"] = gr.themes.Soft()
         except Exception:
             pass  # Skip theme if it fails
 
@@ -462,8 +494,7 @@ def create_interface() -> gr.Blocks:
             """
             # AI Drawing Analyzer
             ### Extract text from PDFs using Vision-Language Models
-            """,
-            elem_classes=["main-header"]
+            """
         )
 
         with gr.Tabs():
@@ -728,8 +759,7 @@ def create_interface() -> gr.Blocks:
             ---
             <center>AI Drawing Analyzer |
             <a href="https://github.com/mohandshamada/AI_Drawings_Reader">GitHub</a></center>
-            """,
-            elem_classes=["footer"]
+            """
         )
 
     return demo
