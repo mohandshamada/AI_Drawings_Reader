@@ -767,6 +767,8 @@ def create_interface() -> gr.Blocks:
 
 def main():
     """Launch the Gradio interface"""
+    import inspect
+
     # Load environment variables
     load_env_file()
 
@@ -776,26 +778,36 @@ def main():
     # Create interface
     demo = create_interface()
 
-    # Try to launch, attempting multiple ports if needed
-    ports_to_try = [default_port] + [p for p in range(7861, 7870) if p != default_port]
+    # Build launch kwargs based on what the Gradio version supports
+    launch_kwargs = {}
 
-    for port in ports_to_try:
+    # Check launch() signature for supported parameters
+    try:
+        sig = inspect.signature(demo.launch)
+        params = sig.parameters
+
+        if 'server_name' in params:
+            launch_kwargs['server_name'] = "0.0.0.0"
+        if 'server_port' in params:
+            launch_kwargs['server_port'] = default_port
+        if 'share' in params:
+            launch_kwargs['share'] = False
+        if 'show_error' in params:
+            launch_kwargs['show_error'] = True
+
+        print(f"Gradio version: {GRADIO_VERSION}")
+        print(f"Starting server on port {default_port}...")
+        demo.launch(**launch_kwargs)
+
+    except Exception as e:
+        # Fallback: try minimal launch
+        print(f"Error with configured launch: {e}")
+        print("Trying minimal launch...")
         try:
-            print(f"Starting server on port {port}...")
-            demo.launch(
-                server_name="0.0.0.0",
-                server_port=port,
-                share=False,  # Set to True to get a public URL
-                show_error=True
-            )
-            break  # Success, exit loop
-        except OSError as e:
-            if "Cannot find empty port" in str(e) or "Address already in use" in str(e):
-                print(f"Port {port} is in use, trying next...")
-                continue
-            raise  # Re-raise other OSErrors
-    else:
-        print("ERROR: Could not find an available port. Try setting GRADIO_SERVER_PORT environment variable.")
+            demo.launch()
+        except Exception as e2:
+            print(f"ERROR: Could not start server: {e2}")
+            print("Try: pip install 'gradio>=4.0.0'")
 
 
 if __name__ == "__main__":
