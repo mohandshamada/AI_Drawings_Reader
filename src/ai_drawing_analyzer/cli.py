@@ -4,8 +4,9 @@ import os
 import json
 import asyncio
 import httpx
+from pathlib import Path
 from datetime import datetime
-from typing import Optional, Set
+from typing import Optional, Set, List
 from tqdm import tqdm
 
 from .clients.factory import ClientFactory
@@ -15,6 +16,30 @@ from .converters.toon_converter import ToonConverter
 from .utils.config import load_env_file, AppConfig
 from .utils.files import detect_and_download
 from .utils.logging import logger
+
+
+def find_pdf_files(folder_path: str) -> List[Path]:
+    """Find all PDF files in a folder (non-recursive by default)"""
+    folder = Path(folder_path)
+    if not folder.exists():
+        raise FileNotFoundError(f"Folder not found: {folder_path}")
+    if not folder.is_dir():
+        raise ValueError(f"Not a directory: {folder_path}")
+
+    pdf_files = sorted(folder.glob("*.pdf"), key=lambda p: p.name.lower())
+    return pdf_files
+
+
+def find_pdf_files_recursive(folder_path: str) -> List[Path]:
+    """Find all PDF files in a folder and subfolders"""
+    folder = Path(folder_path)
+    if not folder.exists():
+        raise FileNotFoundError(f"Folder not found: {folder_path}")
+    if not folder.is_dir():
+        raise ValueError(f"Not a directory: {folder_path}")
+
+    pdf_files = sorted(folder.rglob("*.pdf"), key=lambda p: str(p).lower())
+    return pdf_files
 
 def get_processed_pages(output_file: str) -> Set[int]:
     """Get set of already processed pages from output file"""
@@ -92,6 +117,138 @@ async def process_pdf_async(pdf_path: str, client, model: str, provider: str, re
 
         logger.info(f"OCR complete! Saved to {output_file}")
         return output_file
+
+
+async def process_batch_pdfs(
+    pdf_files: List[Path],
+    client,
+    model: str,
+    provider: str,
+    output_dir: str,
+    resume: bool = False,
+    to_text: bool = False,
+    to_toon: bool = False
+) -> dict:
+    """Process multiple PDF files from a folder
+
+    Args:
+        pdf_files: List of PDF file paths to process
+        client: AI client instance
+        model: Model ID to use
+        provider: Provider name
+        output_dir: Directory to save output files
+        resume: Whether to resume interrupted processing
+        to_text: Convert JSONL to text format
+        to_toon: Convert to Toon format
+
+    Returns:
+        Dictionary with processing results summary
+    """
+    # Create output directory if it doesn't exist
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    results = {
+        "total": len(pdf_files),
+        "successful": 0,
+        "failed": 0,
+        "skipped": 0,
+        "files": []
+    }
+
+    logger.info(f"Starting batch processing of {len(pdf_files)} PDF files")
+    logger.info(f"Output directory: {output_dir}")
+
+    # Process each PDF with overall progress bar
+    for i, pdf_file in enumerate(tqdm(pdf_files, desc="Processing PDFs", unit="file")):
+        file_result = {
+            "file": str(pdf_file),
+            "filename": pdf_file.name,
+            "status": "pending",
+            "output_jsonl": None,
+            "output_text": None,
+            "output_toon": None,
+            "error": None
+        }
+
+        # Generate output filenames based on PDF name
+        base_name = pdf_file.stem  # filename without extension
+        jsonl_output = output_path / f"{base_name}.jsonl"
+        text_output = output_path / f"{base_name}.txt"
+        toon_output = output_path / f"{base_name}.toon"
+
+        # Check if already fully processed (for resume)
+        if resume and jsonl_output.exists():
+            # Check if processing was complete by verifying file has content
+            try:
+                with open(jsonl_output, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                if lines:  # Has some content, may be partial
+                    logger.info(f"[{i+1}/{len(pdf_files)}] Resuming: {pdf_file.name}")
+            except Exception:
+                pass
+
+        try:
+            logger.info(f"[{i+1}/{len(pdf_files)}] Processing: {pdf_file.name}")
+
+            # Process the PDF
+            output_file = await process_pdf_async(
+                str(pdf_file),
+                client,
+                model,
+                provider,
+                resume=resume,
+                output_file=str(jsonl_output)
+            )
+
+            file_result["output_jsonl"] = str(jsonl_output)
+            file_result["status"] = "success"
+
+            # Convert to text if requested
+            if to_text and output_file:
+                try:
+                    converter = DrawingTextConverter(output_file)
+                    converter.convert(str(text_output))
+                    file_result["output_text"] = str(text_output)
+                    logger.info(f"  -> Text output: {text_output.name}")
+                except Exception as e:
+                    logger.warning(f"  -> Text conversion failed: {e}")
+
+            # Convert to Toon if requested
+            if to_toon and output_file:
+                try:
+                    toon_converter = ToonConverter()
+                    toon_converter.convert(output_file, str(toon_output))
+                    file_result["output_toon"] = str(toon_output)
+                    logger.info(f"  -> Toon output: {toon_output.name}")
+                except RuntimeError as e:
+                    logger.warning(f"  -> Toon conversion skipped: {e}")
+                except Exception as e:
+                    logger.warning(f"  -> Toon conversion failed: {e}")
+
+            results["successful"] += 1
+
+        except Exception as e:
+            logger.error(f"[{i+1}/{len(pdf_files)}] Failed: {pdf_file.name} - {e}")
+            file_result["status"] = "failed"
+            file_result["error"] = str(e)
+            results["failed"] += 1
+
+        results["files"].append(file_result)
+
+    # Save batch results summary
+    summary_file = output_path / "_batch_summary.json"
+    with open(summary_file, 'w', encoding='utf-8') as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    logger.info(f"\nBatch processing complete!")
+    logger.info(f"  Total: {results['total']}")
+    logger.info(f"  Successful: {results['successful']}")
+    logger.info(f"  Failed: {results['failed']}")
+    logger.info(f"  Summary saved to: {summary_file}")
+
+    return results
+
 
 async def interactive_provider_selection():
     print("\n🤖 Available AI Providers:")
@@ -172,9 +329,23 @@ Examples:
 
   # Export to Toon format (requires Node.js: pnpm install)
   ai-drawing-analyzer document.pdf -p huggingface-local -m microsoft/Florence-2-large --to-toon
+
+  # Batch process all PDFs in a folder
+  ai-drawing-analyzer --folder /path/to/pdfs -p gemini -m gemini-2.0-flash-exp --output-dir ./output
+
+  # Batch process with text and toon conversion
+  ai-drawing-analyzer -f ./documents -p openai -m gpt-4o --output-dir ./results --to-text --to-toon
+
+  # Batch process recursively (including subfolders)
+  ai-drawing-analyzer --folder ./pdfs --recursive -p gemini -m gemini-2.0-flash-exp --output-dir ./output
         """
     )
-    parser.add_argument('pdf', help='PDF file path, URL, or JSONL file for conversion')
+    parser.add_argument('pdf', nargs='?', help='PDF file path, URL, or JSONL file for conversion')
+    parser.add_argument('--folder', '-f', help='Folder containing PDF files for batch processing')
+    parser.add_argument('--recursive', '-r', action='store_true',
+                        help='Search for PDFs recursively in subfolders (use with --folder)')
+    parser.add_argument('--output-dir', '-d', default='./batch_output',
+                        help='Output directory for batch processing (default: ./batch_output)')
     parser.add_argument('--provider', '-p', choices=list(ClientFactory.PROVIDERS.keys()),
                         help='AI provider (default: interactive)')
     parser.add_argument('--model', '-m', help='Model ID (default: interactive selection)')
@@ -190,9 +361,13 @@ Examples:
 
     args = parser.parse_args()
 
+    # Validate arguments
+    if not args.folder and not args.pdf:
+        parser.error("Either a PDF file or --folder must be specified")
+
     try:
-        # JSONL Conversion Mode
-        if args.pdf.endswith('.json') or args.pdf.endswith('.jsonl'):
+        # JSONL Conversion Mode (single file only)
+        if args.pdf and (args.pdf.endswith('.json') or args.pdf.endswith('.jsonl')):
             logger.info(f"Converting JSONL to text: {args.pdf}")
             converter = DrawingTextConverter(args.pdf)
             converter.convert(args.output_text)
@@ -202,7 +377,91 @@ Examples:
         # Config Setup
         env_vars = load_env_file(args.env)
 
-        # Async Execution Wrapper
+        # Batch Processing Mode
+        if args.folder:
+            async def run_batch():
+                provider = args.provider
+                if not provider:
+                    provider = await interactive_provider_selection()
+                if not provider:
+                    logger.error("No provider selected")
+                    return
+
+                try:
+                    model = args.model
+                    client = None
+
+                    if provider == 'huggingface-local':
+                        if not model:
+                            model = await interactive_model_selection(None, provider)
+                        if not model:
+                            logger.info("Model selection cancelled")
+                            return
+                        client = ClientFactory.create_client(provider, model_id=model)
+                    else:
+                        # API Clients
+                        api_key = args.api_key
+                        client = ClientFactory.create_client(provider, api_key)
+                        if not model:
+                            model = await interactive_model_selection(client, provider)
+                        if not model:
+                            logger.info("Model selection cancelled")
+                            return
+
+                    # Find PDF files
+                    if args.recursive:
+                        pdf_files = find_pdf_files_recursive(args.folder)
+                    else:
+                        pdf_files = find_pdf_files(args.folder)
+
+                    if not pdf_files:
+                        logger.error(f"No PDF files found in: {args.folder}")
+                        return
+
+                    logger.info(f"Found {len(pdf_files)} PDF file(s) to process")
+
+                    # Run batch processing
+                    results = await process_batch_pdfs(
+                        pdf_files=pdf_files,
+                        client=client,
+                        model=model,
+                        provider=provider,
+                        output_dir=args.output_dir,
+                        resume=args.resume,
+                        to_text=args.to_text,
+                        to_toon=args.to_toon
+                    )
+
+                    # Print final summary
+                    print(f"\n{'='*60}")
+                    print(f"BATCH PROCESSING COMPLETE")
+                    print(f"{'='*60}")
+                    print(f"  Total files:  {results['total']}")
+                    print(f"  Successful:   {results['successful']}")
+                    print(f"  Failed:       {results['failed']}")
+                    print(f"  Output dir:   {args.output_dir}")
+                    print(f"{'='*60}")
+
+                except KeyError as e:
+                    logger.error(f"Missing API key: {e}. Set the environment variable or use --api-key")
+                except ValueError as e:
+                    logger.error(f"Configuration error: {e}")
+                except httpx.HTTPError as e:
+                    logger.error(f"Network error: {e}")
+                except httpx.TimeoutException as e:
+                    logger.error(f"Request timeout: {e}")
+                except FileNotFoundError as e:
+                    logger.error(f"File/Folder not found: {e}")
+                except Exception as e:
+                    logger.error(f"Unexpected error: {e}")
+                    if os.getenv("DEBUG"):
+                        import traceback
+                        traceback.print_exc()
+
+            asyncio.run(run_batch())
+            return
+
+        # Single File Processing Mode
         async def run_app():
             provider = args.provider
             if not provider:
@@ -249,7 +508,7 @@ Examples:
                         logger.info(f"Converting output to Toon format: {toon_output}")
                         toon_converter = ToonConverter()
                         toon_converter.convert(output_file, toon_output)
-                        logger.info(f"✅ Toon format export complete: {toon_output}")
+                        logger.info(f"Toon format export complete: {toon_output}")
                     except RuntimeError as e:
                         logger.warning(f"Toon conversion skipped: {e}")
                         logger.warning(f"   Install Node.js dependencies: pnpm install")

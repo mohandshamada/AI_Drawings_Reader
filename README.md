@@ -16,6 +16,7 @@ AI Drawing Analyzer uses cutting-edge Vision-Language Models to extract text fro
 
 ### Core Capabilities
 - **🤖 AI-Powered OCR** - Vision-Language Models beat traditional OCR on complex documents
+- **📁 Batch Processing** - Process all PDFs in a folder with a single command
 - **⚡ Resume Processing** - Interrupt and continue from last processed page
 - **🔄 6 AI Providers** - Local inference + cloud APIs (OpenAI, Gemini, Claude, etc.)
 - **💾 Multiple Output Formats** - JSONL, formatted text, and Toon format
@@ -200,28 +201,47 @@ export JPEG_QUALITY=95
 ai-drawing-analyzer technical_drawing.pdf -p huggingface-local -m microsoft/Florence-2-large
 ```
 
-#### Batch Processing
+#### Batch Processing (NEW - Built-in)
+
+Process all PDFs in a folder with a single command:
+
 ```bash
-#!/bin/bash
-# Process all PDFs in a directory
+# Basic batch processing
+ai-drawing-analyzer --folder /path/to/pdfs -p gemini -m gemini-2.0-flash-exp
 
-# Create output directory
-mkdir -p output
+# With text and Toon conversion
+ai-drawing-analyzer -f ./documents -p openai -m gpt-4o --output-dir ./results --to-text --to-toon
 
-for pdf in *.pdf; do
-  filename=$(basename "$pdf" .pdf)
-  echo "Processing $filename..."
+# Recursive search (include subfolders)
+ai-drawing-analyzer --folder ./pdfs --recursive -p gemini -m gemini-2.0-flash-exp --output-dir ./output
 
-  ai-drawing-analyzer "$pdf" \
-    -p gemini -m gemini-2.0-flash-exp \
-    -o "output/${filename}.jsonl" \
-    --resume --to-text --to-toon
+# Resume interrupted batch processing
+ai-drawing-analyzer -f ./documents -p gemini -m gemini-2.0-flash-exp --output-dir ./output --resume
+```
 
-  echo "✅ $filename complete (JSONL, TXT, and TOON formats)"
-done
+**Output Structure:**
+```
+batch_output/
+├── document1.jsonl      # OCR results for each PDF
+├── document1.txt        # (if --to-text)
+├── document1.toon       # (if --to-toon)
+├── document2.jsonl
+├── document2.txt
+├── document2.toon
+└── _batch_summary.json  # Summary of all processed files
+```
 
-echo "🎉 All documents processed!"
-echo "Output: output/ directory"
+**Batch Summary File (_batch_summary.json):**
+```json
+{
+  "total": 5,
+  "successful": 4,
+  "failed": 1,
+  "files": [
+    {"filename": "doc1.pdf", "status": "success", "output_jsonl": "..."},
+    {"filename": "doc2.pdf", "status": "failed", "error": "..."}
+  ]
+}
 ```
 
 ---
@@ -231,6 +251,7 @@ echo "Output: output/ directory"
 ### Positional Arguments
 ```
 pdf                     PDF file path, URL, or JSONL file for conversion
+                        (optional if using --folder)
 ```
 
 ### Optional Arguments
@@ -244,6 +265,17 @@ pdf                     PDF file path, URL, or JSONL file for conversion
 -m, --model MODEL       Model ID (default: interactive selection)
 
 -k, --api-key API_KEY   API key (default: from environment)
+```
+
+#### Batch Processing (NEW)
+```
+-f, --folder FOLDER     Folder containing PDF files for batch processing
+
+-r, --recursive         Search for PDFs recursively in subfolders
+                        (use with --folder)
+
+-d, --output-dir DIR    Output directory for batch processing
+                        (default: ./batch_output)
 ```
 
 #### Input/Output Options
@@ -453,42 +485,55 @@ ai-drawing-analyzer blueprint_ocr.jsonl \
 #    - Page-by-page content
 ```
 
-### Tutorial 2: Batch Process Documents
+### Tutorial 2: Batch Process Documents (NEW - Built-in)
+
+Process all PDFs in a folder with a single command - no scripting required!
 
 ```bash
-# Create processing script
-cat > batch_process.sh << 'EOF'
-#!/bin/bash
+# 1. Basic batch processing - processes all PDFs in a folder
+ai-drawing-analyzer --folder ./documents -p gemini -m gemini-2.0-flash-exp
 
-PROVIDER="gemini"
-MODEL="gemini-2.0-flash-exp"
+# 2. Full batch processing with all output formats
+ai-drawing-analyzer \
+  --folder ./documents \
+  -p gemini \
+  -m gemini-2.0-flash-exp \
+  --output-dir ./output \
+  --to-text \
+  --to-toon \
+  --resume
 
-# Create output directory
-mkdir -p output
+# 3. Include PDFs in subfolders
+ai-drawing-analyzer \
+  --folder ./project_files \
+  --recursive \
+  -p openai \
+  -m gpt-4o \
+  --output-dir ./all_results
 
-for pdf in documents/*.pdf; do
-  filename=$(basename "$pdf" .pdf)
-  echo "📄 Processing: $filename"
+# Output structure:
+# output/
+# ├── document1.jsonl
+# ├── document1.txt
+# ├── document1.toon
+# ├── document2.jsonl
+# ├── document2.txt
+# ├── document2.toon
+# └── _batch_summary.json  <- Summary of all processed files
+```
 
-  ai-drawing-analyzer "$pdf" \
-    -p "$PROVIDER" \
-    -m "$MODEL" \
-    -o "output/${filename}.jsonl" \
-    --resume \
-    --to-text \
-    --output-text "output/${filename}.txt" \
-    --to-toon \
-    --output-toon "output/${filename}.toon"
+**Check batch results:**
+```bash
+# View the batch summary
+cat output/_batch_summary.json | python -m json.tool
 
-  echo "✅ Completed: $filename (JSONL + TXT + TOON)"
-done
-
-echo "🎉 All documents processed!"
-echo "📁 Output: ./output/ directory"
-EOF
-
-chmod +x batch_process.sh
-./batch_process.sh
+# Example output:
+# {
+#   "total": 10,
+#   "successful": 9,
+#   "failed": 1,
+#   "files": [...]
+# }
 ```
 
 ### Tutorial 3: Resume Interrupted Processing
@@ -887,11 +932,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🎯 Roadmap
 
+- [x] Batch processing for multiple PDFs (folder support)
 - [ ] Support for more output formats (Markdown, HTML)
 - [ ] Parallel page processing
 - [ ] Web interface
 - [ ] Docker container
-- [ ] Batch API for high-volume processing
 - [ ] Custom model fine-tuning guides
 
 ---
