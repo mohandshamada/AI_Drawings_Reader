@@ -16,6 +16,7 @@ AI Drawing Analyzer uses cutting-edge Vision-Language Models to extract text fro
 
 ### Core Capabilities
 - **🤖 AI-Powered OCR** - Vision-Language Models beat traditional OCR on complex documents
+- **🖥️ Web Interface** - User-friendly Gradio GUI for easy processing (NEW)
 - **📁 Batch Processing** - Process all PDFs in a folder with a single command
 - **⚡ Resume Processing** - Interrupt and continue from last processed page
 - **🔄 6 AI Providers** - Local inference + cloud APIs (OpenAI, Gemini, Claude, etc.)
@@ -24,6 +25,8 @@ AI Drawing Analyzer uses cutting-edge Vision-Language Models to extract text fro
 - **🛡️ Robust Error Handling** - Graceful recovery and detailed error messages
 
 ### Advanced Features (NEW)
+- **🌐 Gradio Web UI** - Browser-based interface with API key management
+- **⚙️ Auto Resource Detection** - Automatically adjusts settings based on available RAM/GPU
 - **📦 Toon Format Export** - Convert to space-efficient Toon format via Node.js bridge
 - **⚡ Response Caching** - Cache API responses to reduce costs and improve speed
 - **🧪 Test Suite** - 13 comprehensive unit tests with pytest
@@ -120,6 +123,60 @@ The tool will:
 ```bash
 ai-drawing-analyzer document.pdf -p gemini -m gemini-2.0-flash-exp
 ```
+
+---
+
+## 🖥️ Web Interface (NEW)
+
+A user-friendly browser-based interface powered by Gradio.
+
+### Installation
+
+```bash
+# Install with GUI support
+pip install -e ".[gui]"
+
+# Or install full version (includes GUI + local models)
+pip install -e ".[full]"
+```
+
+### Launch the Web Interface
+
+```bash
+# Start the web server
+ai-drawing-analyzer-gui
+```
+
+The interface will be available at **http://localhost:7860**
+
+### Features
+
+| Tab | Description |
+|-----|-------------|
+| **Single PDF** | Upload and process one PDF with provider/model selection |
+| **Batch Processing** | Process entire folders of PDFs |
+| **Settings** | Save API keys (persisted locally for future use) |
+| **Help** | Quick start guide and troubleshooting tips |
+
+### Google Colab Usage
+
+```python
+# In a Colab notebook cell:
+!pip install -e ".[gui]"
+
+from ai_drawing_analyzer.gui import create_interface
+demo = create_interface()
+demo.launch(share=True)  # Creates a public URL
+```
+
+### Screenshots
+
+The web interface provides:
+- Drag-and-drop PDF upload
+- Real-time processing progress
+- Automatic API key persistence
+- Provider comparison and recommendations
+- System resource detection display
 
 ---
 
@@ -933,9 +990,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🎯 Roadmap
 
 - [x] Batch processing for multiple PDFs (folder support)
+- [x] Web interface (Gradio GUI)
+- [x] Auto-adjust settings based on system resources
 - [ ] Support for more output formats (Markdown, HTML)
 - [ ] Parallel page processing
-- [ ] Web interface
 - [ ] Docker container
 - [ ] Custom model fine-tuning guides
 
