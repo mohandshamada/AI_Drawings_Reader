@@ -28,9 +28,14 @@ dependencies = [
 
 [project.scripts]
 ai-drawing-analyzer = "ai_drawing_analyzer.cli:main"
+ai-drawing-analyzer-gui = "ai_drawing_analyzer.gui:main"
 
 # Optional dependencies
 [project.optional-dependencies]
+gui = [
+    "gradio>=4.0.0",
+]
+
 local = [
     "transformers==4.47.1",
     "torch>=2.6.0",
@@ -47,6 +52,7 @@ full = [
     "timm==0.9.16",
     "einops==0.8.0",
     "accelerate>=0.26.0",
+    "gradio>=4.0.0",
 ]
 
 dev = [
